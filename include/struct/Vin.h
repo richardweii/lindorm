@@ -24,37 +24,37 @@
 #include "Root.h"
 
 namespace LindormContest {
-    // The length of vin.
-    const int32_t VIN_LENGTH = 17;
+// The length of vin.
+const int32_t VIN_LENGTH = 17;
 
-    /**
-     * The key type of our data schema.
-     * One vin is similar to the key of a KV-Engine Database.
-     * In our data scheme, one Vin may be related to several rows, where one
-     * row corresponds to a specific timestamp of this vin.
-     */
-    typedef struct Vin {
-        char vin[VIN_LENGTH];
+/**
+ * The key type of our data schema.
+ * One vin is similar to the key of a KV-Engine Database.
+ * In our data scheme, one Vin may be related to several rows, where one
+ * row corresponds to a specific timestamp of this vin.
+ */
+typedef struct Vin {
+  char vin[VIN_LENGTH];
 
-        Vin();
+  Vin();
 
-        Vin(const Vin &rhs);
+  Vin(const Vin &rhs);
 
-        bool operator==(const Vin &rhs) const;
+  bool operator==(const Vin &rhs) const;
 
-        bool operator!=(const Vin &rhs) const;
+  bool operator!=(const Vin &rhs) const;
 
-        bool operator<(const Vin &rhs) const;
+  bool operator<(const Vin &rhs) const;
 
-        bool operator>(const Vin &rhs) const;
+  bool operator>(const Vin &rhs) const;
 
-        bool operator<=(const Vin &rhs) const;
+  bool operator<=(const Vin &rhs) const;
 
-        bool operator>=(const Vin &rhs) const;
+  bool operator>=(const Vin &rhs) const;
 
-        Vin& operator=(const Vin &rhs);
-    }Vin;
+  Vin &operator=(const Vin &rhs);
+} Vin;
 
-}
+} // namespace LindormContest
 
-#endif //LINDORM_TSDB_CONTEST_CPP_VIN_H
+#endif // LINDORM_TSDB_CONTEST_CPP_VIN_H

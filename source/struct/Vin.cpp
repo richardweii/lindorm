@@ -22,43 +22,42 @@
 
 namespace LindormContest {
 
-    Vin::Vin() : vin() {
-    }
+Vin::Vin() : vin() {}
 
-    Vin::Vin(const Vin &rhs) : vin() {
-        strncpy(vin, rhs.vin, VIN_LENGTH);
-    }
-
-    bool Vin::operator==(const Vin &rhs) const {
-        return std::strncmp(vin, rhs.vin, VIN_LENGTH) == 0;
-    }
-
-    bool Vin::operator!=(const Vin &rhs) const {
-        return !(rhs == *this);
-    }
-
-    bool Vin::operator<(const Vin &rhs) const {
-        return std::strncmp(vin, rhs.vin, VIN_LENGTH) < 0;
-    }
-
-    bool Vin::operator>(const Vin &rhs) const {
-        return std::strncmp(vin, rhs.vin, VIN_LENGTH) > 0;
-    }
-
-    bool Vin::operator<=(const Vin &rhs) const {
-        return std::strncmp(vin, rhs.vin, VIN_LENGTH) <= 0;
-    }
-
-    bool Vin::operator>=(const Vin &rhs) const {
-        return std::strncmp(vin, rhs.vin, VIN_LENGTH) >= 0;
-    }
-
-    Vin& Vin::operator=(const Vin &rhs) {
-        if (&rhs == this) {
-            return *this;
-        }
-        strncpy(vin, rhs.vin, VIN_LENGTH);
-        return *this;
-    }
-
+Vin::Vin(const Vin &rhs) : vin() {
+  strncpy(vin, rhs.vin, VIN_LENGTH);
 }
+
+bool Vin::operator==(const Vin &rhs) const {
+  return std::strncmp(vin, rhs.vin, VIN_LENGTH) == 0;
+}
+
+bool Vin::operator!=(const Vin &rhs) const {
+  return !(rhs == *this);
+}
+
+bool Vin::operator<(const Vin &rhs) const {
+  return std::strncmp(vin, rhs.vin, VIN_LENGTH) < 0;
+}
+
+bool Vin::operator>(const Vin &rhs) const {
+  return std::strncmp(vin, rhs.vin, VIN_LENGTH) > 0;
+}
+
+bool Vin::operator<=(const Vin &rhs) const {
+  return std::strncmp(vin, rhs.vin, VIN_LENGTH) <= 0;
+}
+
+bool Vin::operator>=(const Vin &rhs) const {
+  return std::strncmp(vin, rhs.vin, VIN_LENGTH) >= 0;
+}
+
+Vin &Vin::operator=(const Vin &rhs) {
+  if (&rhs == this) {
+    return *this;
+  }
+  strncpy(vin, rhs.vin, VIN_LENGTH);
+  return *this;
+}
+
+} // namespace LindormContest

@@ -21,45 +21,45 @@
 #ifndef LINDORM_TSDB_CONTEST_CPP_REQUESTS_H
 #define LINDORM_TSDB_CONTEST_CPP_REQUESTS_H
 
-#include "Vin.h"
 #include "Row.h"
+#include "Vin.h"
 
 namespace LindormContest {
 
-    /**
-     * Write several rows for this table.
-     * All rows must be complete, i.e., containing all columns defined in schema.
-     */
-    typedef struct WriteRequest {
-        std::string tableName;
-        std::vector<Row> rows;
-    }WriteRequest;
+/**
+ * Write several rows for this table.
+ * All rows must be complete, i.e., containing all columns defined in schema.
+ */
+typedef struct WriteRequest {
+  std::string tableName;
+  std::vector<Row> rows;
+} WriteRequest;
 
-    /**
-     * Request several target columns of this vin.
-     * If requestedColumnFieldNames is empty, return all columns.
-     * Return all rows with timestamp during [timeLowerBound, timeUpperBound).
-     * timeLowerBound is included, timeUpperBound is excluded.
-     */
-    typedef struct TimeRangeQueryRequest {
-        std::string tableName;
-        Vin vin;
-        int64_t timeLowerBound;
-        int64_t timeUpperBound;
-        std::set<std::string> requestedColumns;
-    }TimeRangeQueryRequest;
+/**
+ * Request several target columns of this vin.
+ * If requestedColumnFieldNames is empty, return all columns.
+ * Return all rows with timestamp during [timeLowerBound, timeUpperBound).
+ * timeLowerBound is included, timeUpperBound is excluded.
+ */
+typedef struct TimeRangeQueryRequest {
+  std::string tableName;
+  Vin vin;
+  int64_t timeLowerBound;
+  int64_t timeUpperBound;
+  std::set<std::string> requestedColumns;
+} TimeRangeQueryRequest;
 
-    /**
-     * Request several target columns of several vins.
-     * If requestedFields is empty, return all columns.
-     * Return the rows with the newest timestamp for these vins.
-     */
-    typedef struct LatestQueryRequest {
-        std::string tableName;
-        std::vector<Vin> vins;
-        std::set<std::string> requestedColumns;
-    }LatestQueryRequest;
+/**
+ * Request several target columns of several vins.
+ * If requestedFields is empty, return all columns.
+ * Return the rows with the newest timestamp for these vins.
+ */
+typedef struct LatestQueryRequest {
+  std::string tableName;
+  std::vector<Vin> vins;
+  std::set<std::string> requestedColumns;
+} LatestQueryRequest;
 
-}
+} // namespace LindormContest
 
-#endif //LINDORM_TSDB_CONTEST_CPP_REQUESTS_H
+#endif // LINDORM_TSDB_CONTEST_CPP_REQUESTS_H

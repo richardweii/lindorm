@@ -25,34 +25,33 @@
 
 namespace LindormContest {
 
-    struct VinHasher {
-        size_t operator()(const Vin &c) const;
-        bool operator()(const Vin &c1, const Vin &c2) const;
-    };
+struct VinHasher {
+  size_t operator()(const Vin &c) const;
+  bool operator()(const Vin &c1, const Vin &c2) const;
+};
 
-    struct RowHasher {
-        size_t operator()(const Row &c) const;
-        bool operator()(const Row &c1, const Row &c2) const;
-    };
+struct RowHasher {
+  size_t operator()(const Row &c) const;
+  bool operator()(const Row &c1, const Row &c2) const;
+};
 
-    inline size_t VinHasher::operator()(const Vin &c) const {
-        // Apple Clang does not support this function, use g++-12 to take place Apple Clang.
-        return std::_Hash_impl::hash((void *) c.vin, VIN_LENGTH);
-    }
-
-    inline bool VinHasher::operator()(const Vin &c1, const Vin &c2) const {
-        return c1 == c2;
-    }
-
-
-    inline size_t RowHasher::operator()(const Row &c) const {
-        VinHasher vinHasher;
-        return vinHasher(c.vin);
-    }
-
-    inline bool RowHasher::operator()(const Row &c1, const Row &c2) const {
-        return c1 == c2;
-    }
+inline size_t VinHasher::operator()(const Vin &c) const {
+  // Apple Clang does not support this function, use g++-12 to take place Apple Clang.
+  return std::_Hash_impl::hash((void *) c.vin, VIN_LENGTH);
 }
 
-#endif //LINDORM_TSDB_CONTEST_CPP_HASHER_H
+inline bool VinHasher::operator()(const Vin &c1, const Vin &c2) const {
+  return c1 == c2;
+}
+
+inline size_t RowHasher::operator()(const Row &c) const {
+  VinHasher vinHasher;
+  return vinHasher(c.vin);
+}
+
+inline bool RowHasher::operator()(const Row &c1, const Row &c2) const {
+  return c1 == c2;
+}
+} // namespace LindormContest
+
+#endif // LINDORM_TSDB_CONTEST_CPP_HASHER_H

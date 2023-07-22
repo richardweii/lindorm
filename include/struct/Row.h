@@ -21,48 +21,48 @@
 #ifndef LINDORM_TSDB_CONTEST_CPP_ROWVALUE_H
 #define LINDORM_TSDB_CONTEST_CPP_ROWVALUE_H
 
-#include "Vin.h"
 #include "ColumnValue.h"
+#include "Vin.h"
 
 namespace LindormContest {
 
-    /**
-     * A row corresponds to a specific vin.
-     * One vin may have several rows, where each row has its unique timestamp.
-     * In upsert request, the fields contains all columns in our schema, which
-     * form a complete row. In read request, the result may only contain several
-     * columns according to our request.
-     */
-    typedef struct Row {
-        Vin vin;
-        int64_t timestamp;
+/**
+ * A row corresponds to a specific vin.
+ * One vin may have several rows, where each row has its unique timestamp.
+ * In upsert request, the fields contains all columns in our schema, which
+ * form a complete row. In read request, the result may only contain several
+ * columns according to our request.
+ */
+typedef struct Row {
+  Vin vin;
+  int64_t timestamp;
 
-        // For write request, this map must contain all columns defined in schema.
-        // For read request, this is the result set only containing the columns we queried.
-        std::map<std::string, ColumnValue> columns; // KEY: columnFieldName, VALVE: column data.
+  // For write request, this map must contain all columns defined in schema.
+  // For read request, this is the result set only containing the columns we queried.
+  std::map<std::string, ColumnValue> columns; // KEY: columnFieldName, VALVE: column data.
 
-        Row(Row &&rhs) noexcept;
+  Row(Row &&rhs) noexcept;
 
-        Row(const Row &rhs);
+  Row(const Row &rhs);
 
-        Row();
+  Row();
 
-        bool operator==(const Row &rhs) const;
+  bool operator==(const Row &rhs) const;
 
-        bool operator!=(const Row &rhs) const;
+  bool operator!=(const Row &rhs) const;
 
-        bool operator<(const Row &rhs) const;
+  bool operator<(const Row &rhs) const;
 
-        bool operator>(const Row &rhs) const;
+  bool operator>(const Row &rhs) const;
 
-        bool operator<=(const Row &rhs) const;
+  bool operator<=(const Row &rhs) const;
 
-        bool operator>=(const Row &rhs) const;
+  bool operator>=(const Row &rhs) const;
 
-        Row& operator=(const Row &rhs);
+  Row &operator=(const Row &rhs);
 
-    }Row;
+} Row;
 
-}
+} // namespace LindormContest
 
-#endif //LINDORM_TSDB_CONTEST_CPP_ROWVALUE_H
+#endif // LINDORM_TSDB_CONTEST_CPP_ROWVALUE_H
