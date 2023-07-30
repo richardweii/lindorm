@@ -7,13 +7,13 @@ BasedOnStyle: LLVM
 AlignTrailingComments: true
 
 # 不允许较短 block 在同一行
-AllowShortBlocksOnASingleLine: false
+AllowShortBlocksOnASingleLine: true
 
 # 不允许较短 case 在同一行
-AllowShortCaseLabelsOnASingleLine: false
+AllowShortCaseLabelsOnASingleLine: true
 
-# 允许空函数一行显示
-AllowShortFunctionsOnASingleLine: Empty
+# 允许空函数一行
+AllowShortFunctionsOnASingleLine: true
 
 # 不支持一行的条件判断语句
 AllowShortIfStatementsOnASingleLine: false
@@ -27,8 +27,7 @@ AllowShortLoopsOnASingleLine: false
 # 圆括号的换行方式
 BreakBeforeBraces: Attach
 
-# 在构造函数初始化时按逗号断行，并以冒号对齐
-BreakConstructorInitializersBeforeComma: false
+PackConstructorInitializers: CurrentLine
 
 # 每行字符的长度
 ColumnLimit: 120
@@ -101,3 +100,5 @@ Standard: Cpp11
 # 函数是否可以在同一行
 BinPackArguments: false
 BinPackParameters: false
+
+AlwaysBreakTemplateDeclarations: Yes 

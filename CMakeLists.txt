@@ -22,9 +22,6 @@ else ()
 endif ()
 
 include_directories(${PROJECT_SOURCE_DIR}/include)
+
 add_subdirectory(example)
-
-file(GLOB_RECURSE sources_c "${PROJECT_SOURCE_DIR}/source/*.c")
-file(GLOB_RECURSE sources_cpp "${PROJECT_SOURCE_DIR}/source/*.cpp")
-
-add_library(yourDbLib ${sources_c} ${sources_cpp})
+add_subdirectory(test)
