@@ -6,10 +6,12 @@ namespace LindormContest {
 
 Writer::Writer(const char *path) : File(path, O_APPEND | O_WRONLY | O_TRUNC | O_CREAT){};
 
-Status Writer::append(const Slice &data) {
+Status Writer::append(const Slice &data, OUT uint32_t &cur_off) {
+  std::unique_lock<std::mutex> lk(lock_);
   auto rc = write(data.data(), data.size());
   if (rc == Status::OK) {
     written_size_ += data.size();
+    cur_off = written_size_;
   }
   return rc;
 };

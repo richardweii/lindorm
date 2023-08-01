@@ -50,10 +50,11 @@ private:
 // 将row写入block，以及满了之后写入文件
 class BlockWriter {
 public:
-  BlockWriter(InternalSchema *schema, Block *block);
-
+  explicit BlockWriter(InternalSchema *schema);
+  Status init();
+  Status fetch_new_block();
   Status write_row(const Row &row, OUT InternalRow *internal_row);
-  Status solidify(Writer &writer);
+  uint32_t solidify(Writer &writer);
 
 private:
   void encode_row(char *dst, const Row &row, uint16_t row_sz);

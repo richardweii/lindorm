@@ -1,8 +1,9 @@
 #include "block.h"
+#include "env.h"
 #include "util/logging.h"
 namespace LindormContest {
 
-BlockWriter::BlockWriter(InternalSchema *schema, Block *block) : block_(block), schema_(schema) {}
+BlockWriter::BlockWriter(InternalSchema *schema) : schema_(schema) {}
 
 Status BlockWriter::write_row(const Row &row, OUT InternalRow *internal_row) {
   auto cur_sz = block_->size();
@@ -62,4 +63,20 @@ void BlockWriter::encode_row(char *dst, const Row &row, uint16_t row_sz) {
     }
   }
 };
+
+uint32_t BlockWriter::solidify(Writer &writer) {
+  uint32_t off;
+  // TODO: 在这里写入之前可以进行压缩
+  auto rc = writer.append(Slice(block_->data(), block_->size()), off);
+  ENSURE(rc == Status::OK, "write to file failed");
+  return off;
+};
+
+Status BlockWriter::fetch_new_block() {
+  Env::instance().release_block(block_);
+  Env::instance().fetch_block(&block_);
+  return Status::OK;
+};
+
+Status BlockWriter::init() { return Env::instance().fetch_block(&block_); };
 } // namespace LindormContest

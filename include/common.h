@@ -15,6 +15,7 @@ namespace LindormContest {
 
 constexpr uint32_t kBlockSize = 32 * KB;
 constexpr int kColumnNum = 60;
+constexpr int kShard = 64;
 
 } // namespace LindormContest
 

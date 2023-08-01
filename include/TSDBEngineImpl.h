@@ -9,6 +9,8 @@
 #define LINDORMTSDBCONTESTCPP_TSDBENGINEIMPL_H
 
 #include "TSDBEngine.hpp"
+#include "db_index.h"
+#include <unordered_map>
 
 namespace LindormContest {
 
@@ -34,6 +36,9 @@ public:
   int executeTimeRangeQuery(const TimeRangeQueryRequest &trReadReq, std::vector<Row> &trReadRes) override;
 
   ~TSDBEngineImpl() override;
+
+private:
+  std::unordered_map<std::string, DbIndex *> tables_;
 }; // End class TSDBEngineImpl.
 
 } // namespace LindormContest

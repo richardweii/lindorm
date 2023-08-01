@@ -2,7 +2,7 @@ cmake_minimum_required(VERSION 2.8.12)
 project(lindorm-tsdb-contest-cpp)
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 # We use g++-12 to compile, so that we recommend you to use the same compiler to test for better compatibility.
-
+set(CMAKE_CXX_STANDARD 17)
 message("Build Type: ${CMAKE_BUILD_TYPE} ${CMAKE_CXX_FLAGS}")
 if( CMAKE_BUILD_TYPE STREQUAL "Debug" )
 set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -g -Wall -Wno-unused-variable")
