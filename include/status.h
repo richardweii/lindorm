@@ -9,7 +9,9 @@ enum class Status {
   NotFound,
   NotSupported,
   ExceedCapacity,
+  END,
   NotEnough,
 };
 } // namespace LindormContest
+
 #endif

@@ -8,12 +8,17 @@
 #ifndef LINDORMTSDBCONTESTCPP_TSDBENGINEIMPL_H
 #define LINDORMTSDBCONTESTCPP_TSDBENGINEIMPL_H
 
+#include "Hasher.hpp"
 #include "TSDBEngine.hpp"
-#include "db_index.h"
+#include "io/file_manager.h"
+#include "util/rwlock.h"
+#include <mutex>
+#include <string>
 #include <unordered_map>
 
 namespace LindormContest {
 
+class ShardMemtable;
 class TSDBEngineImpl : public TSDBEngine {
 public:
   /**
@@ -38,7 +43,28 @@ public:
   ~TSDBEngineImpl() override;
 
 private:
-  std::unordered_map<std::string, DbIndex *> tables_;
+  friend class MemTable;
+  void SaveSchema();
+  void LoadSchema();
+
+  std::string table_name_;
+  // How many columns is defined in schema for the sole table.
+  int columnsNum;
+  // The column's type for each column.
+  ColumnType *columnsType = nullptr;
+  // The column's name for each column.
+  std::string *columnsName = nullptr;
+
+  // 用于存储 列名到其在schema中下标的映射
+  std::unordered_map<std::string, int> col2colid;
+
+  // 用于存储 17个字节的 vin 到 对应的唯一的一个uint16_t的vid的映射关系
+  RWLock vin2vid_lck;
+  uint16_t vid_cnt_ = 0;
+  std::unordered_map<std::string, uint16_t> vin2vid;
+
+  FileManager *file_manager_;
+  ShardMemtable *shard_memtable_;
 }; // End class TSDBEngineImpl.
 
 } // namespace LindormContest
