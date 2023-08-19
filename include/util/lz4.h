@@ -42,7 +42,6 @@ extern "C" {
 /* --- Dependency --- */
 #include <stddef.h>   /* size_t */
 
-namespace LindormContest {
 
 /**
   Introduction
@@ -854,7 +853,7 @@ LZ4LIB_API int LZ4_decompress_fast_usingDict (const char* src, char* dst, int or
  */
 LZ4LIB_API void LZ4_resetStream (LZ4_stream_t* streamPtr);
 
-}
+
 
 #endif /* LZ4_H_98237428734687 */
 
