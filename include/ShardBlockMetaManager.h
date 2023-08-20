@@ -126,7 +126,7 @@ public:
       // block_cnt
       int blk_cnt;
       file->read((char *) &blk_cnt, sizeof(blk_cnt));
-      block_cnts[shard_id] = blk_cnt;
+      block_cnts[shard_id] = 0;
 
       LOG_ASSERT(head[shard_id] == nullptr, "head[shard_id] should be nullptr");
       for (int i = 0; i < blk_cnt; i++) {

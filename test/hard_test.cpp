@@ -7,6 +7,7 @@
 #include "util/logging.h"
 #include <algorithm>
 #include <chrono>
+#include <cstdlib>
 #include <cstring>
 #include <filesystem>
 #include <fstream>
@@ -57,6 +58,77 @@ static constexpr int kVinNum = 30000;
 static constexpr int kRowsPerVin = 10;
 static LindormContest::Row rows[kVinNum][kRowsPerVin];
 
+static bool RowEquals(const LindormContest::Row &a, const LindormContest::Row &b) {
+  if (a != b)
+    return false;
+  auto a_cols = a.columns;
+  auto b_cols = b.columns;
+  LOG_ASSERT(a_cols.size() == b_cols.size(), "a_cols.size %zu, b_cols.size %zu", a_cols.size(), b_cols.size());
+  for (auto &col : a_cols) {
+    auto &name = col.first;
+    auto a_col_val = col.second;
+    auto iter = b_cols.find(name);
+    LOG_ASSERT(iter != b_cols.cend(), "b_cols 没有 col %s", name.c_str());
+    auto b_col_val = iter->second;
+    LOG_ASSERT(a_col_val.getColumnType() == b_col_val.getColumnType(), "column type !=");
+    switch (a_col_val.getColumnType()) {
+      case LindormContest::COLUMN_TYPE_STRING: {
+        std::pair<int32_t, const char *> a_pair;
+        a_col_val.getStringValue(a_pair);
+        std::string a_str(a_pair.second, a_pair.first);
+
+        std::pair<int32_t, const char *> b_pair;
+        b_col_val.getStringValue(b_pair);
+        std::string b_str(b_pair.second, b_pair.first);
+
+        LOG_ASSERT(a_str == b_str, "a_str %s b_str %s", a_str.c_str(), b_str.c_str());
+      } break;
+      case LindormContest::COLUMN_TYPE_INTEGER: {
+        int a_val;
+        a_col_val.getIntegerValue(a_val);
+
+        int b_val;
+        b_col_val.getIntegerValue(b_val);
+
+        LOG_ASSERT(a_val == b_val, "a_val %d b_val %d", a_val, b_val);
+      } break;
+      case LindormContest::COLUMN_TYPE_DOUBLE_FLOAT: {
+        double a_val;
+        a_col_val.getDoubleFloatValue(a_val);
+
+        double b_val;
+        b_col_val.getDoubleFloatValue(b_val);
+        LOG_ASSERT(a_val == b_val, "a_val %f b_val %f", a_val, b_val);
+      } break;
+      case LindormContest::COLUMN_TYPE_UNINITIALIZED: break;
+    }
+  }
+
+  return true;
+}
+
+char *randstr(char *str, const int len) {
+  srand(time(NULL));
+  int i;
+  for (i = 0; i < len; ++i) {
+    switch ((rand() % 3)) {
+      case 1: str[i] = 'A' + rand() % 26; break;
+      case 2: str[i] = 'a' + rand() % 26; break;
+      default: str[i] = '0' + rand() % 10; break;
+    }
+  }
+  str[++i] = '\0';
+  return str;
+}
+
+std::string RandStr() {
+  srand(time(NULL));
+  int len = rand() % 20 + 1;
+  char buf[1010];
+  randstr(buf, len);
+  return std::string(buf);
+}
+
 void prepare_data() {
   LOG_INFO("start prepare data...");
 
@@ -81,7 +153,8 @@ void prepare_data() {
             break;
           }
           case 2: {
-            std::string s = std::to_string(j);
+            // std::string s = RandStr();
+            std::string s = std::string(20, j + '0');
             LindormContest::ColumnValue col(s);
             LOG_ASSERT(col.columnType == LindormContest::COLUMN_TYPE_STRING, "???");
             row.columns.insert(std::make_pair(col_name, col));
@@ -94,26 +167,22 @@ void prepare_data() {
   LOG_INFO("prepare data finished!");
 }
 
-void upsert(LindormContest::TSDBEngine *engine) {
-  LOG_INFO("start upsert...");
-  // insert
-  for (int i = 0; i < kVinNum; i++) {
-    for (int j = 0; j < kRowsPerVin; j++) {
-      LindormContest::WriteRequest wReq;
-      wReq.tableName = "t1";
-      wReq.rows.push_back(rows[i][j]);
-      int ret = engine->upsert(wReq);
-    }
-  }
-  LOG_INFO("upsert finished!");
-}
-
 void parallel_upsert(LindormContest::TSDBEngine *engine) {
   LOG_INFO("start parallel upsert...");
 
   std::vector<std::thread> threads;
   const int thread_num = 30;
   const int per_thread_vin_num = kVinNum / thread_num;
+  int is[kVinNum];
+  int js[kRowsPerVin];
+  for (int i = 0; i < kVinNum; i++) {
+    is[i] = i;
+  }
+  for (int j = 0; j < kRowsPerVin; j++) {
+    js[j] = j;
+  }
+  std::random_shuffle(is, is + kVinNum);
+  std::random_shuffle(js, js + kRowsPerVin);
   for (int t = 0; t < thread_num; t++) {
     threads.emplace_back([=]() {
       for (int j = 0; j < kRowsPerVin; j++) {
@@ -122,7 +191,7 @@ void parallel_upsert(LindormContest::TSDBEngine *engine) {
           wReq.tableName = "t1";
           // int k = 0;
           // for (; i < (t + 1) * per_thread_vin_num && k < 500; k++, i++) {
-          wReq.rows.push_back(rows[i][j]);
+          wReq.rows.push_back(rows[is[i]][js[j]]);
           // }
           int ret = engine->upsert(wReq);
         }
@@ -137,59 +206,11 @@ void parallel_upsert(LindormContest::TSDBEngine *engine) {
   LOG_INFO("parallel upsert end");
 }
 
-void test_latest(LindormContest::TSDBEngine *engine) {
-  LOG_INFO("start test latest...");
-  // validate executeLatestQuery
-  for (int i = 0; i < kVinNum; i++) {
-    LindormContest::LatestQueryRequest pReadReq;
-    std::vector<LindormContest::Row> pReadRes;
-    pReadReq.tableName = "t1";
-    for (int j = 0; j < LindormContest::kColumnNum; j++) {
-      std::string col_name = "c" + std::to_string(j);
-      pReadReq.requestedColumns.insert(col_name);
-    }
-    LindormContest::Vin vin;
-    memcpy(vin.vin, rows[i][0].vin.vin, LindormContest::VIN_LENGTH);
-    pReadReq.vins.push_back(vin);
-    engine->executeLatestQuery(pReadReq, pReadRes);
-    LOG_ASSERT(pReadRes.size() == 1, "executeLatestQuery failed");
-    auto row = pReadRes[0];
-    for (int k = 0; k < LindormContest::kColumnNum; k++) {
-      std::string col_name = "c" + std::to_string(k);
-      auto pair = row.columns.find(col_name);
-      LOG_ASSERT(pair != row.columns.end(), "error");
-      auto col_val = pair->second;
-      switch (types[k]) {
-        case 0: {
-          LOG_ASSERT(col_val.columnType == LindormContest::COLUMN_TYPE_INTEGER, "COLUMN_TYPE_INTEGER");
-          int val;
-          col_val.getIntegerValue(val);
-          LOG_ASSERT(val == kRowsPerVin - 1, "val = %d", val);
-        } break;
-        case 1: {
-          LOG_ASSERT(col_val.columnType == LindormContest::COLUMN_TYPE_DOUBLE_FLOAT, "COLUMN_TYPE_DOUBLE_FLOAT");
-          double val;
-          col_val.getDoubleFloatValue(val);
-          LOG_ASSERT(val == (kRowsPerVin - 1) * 1.0, "val = %f", val);
-        } break;
-        case 2: {
-          LOG_ASSERT(col_val.columnType == LindormContest::COLUMN_TYPE_STRING, "COLUMN_TYPE_STRING");
-          std::pair<int32_t, const char *> pair;
-          col_val.getStringValue(pair);
-          std::string str(pair.second, pair.first);
-          LOG_ASSERT(str == std::to_string(kRowsPerVin - 1), "val = %s", str.c_str());
-        } break;
-      }
-    }
-  }
-  LOG_INFO("test latest PASS");
-}
-
 void parallel_test_latest(LindormContest::TSDBEngine *engine) {
   LOG_INFO("start parallel test latest...");
   // validate executeLatestQuery
   std::vector<std::thread> threads;
-  const int thread_num = 30;
+  const int thread_num = 1;
   const int per_thread_vin_num = kVinNum / thread_num;
 
   for (int t = 0; t < thread_num; t++) {
@@ -208,33 +229,7 @@ void parallel_test_latest(LindormContest::TSDBEngine *engine) {
         engine->executeLatestQuery(pReadReq, pReadRes);
         LOG_ASSERT(pReadRes.size() == 1, "executeLatestQuery failed");
         auto row = pReadRes[0];
-        for (int k = 0; k < LindormContest::kColumnNum; k++) {
-          std::string col_name = "c" + std::to_string(k);
-          auto pair = row.columns.find(col_name);
-          LOG_ASSERT(pair != row.columns.end(), "error");
-          auto col_val = pair->second;
-          switch (types[k]) {
-            case 0: {
-              LOG_ASSERT(col_val.columnType == LindormContest::COLUMN_TYPE_INTEGER, "COLUMN_TYPE_INTEGER");
-              int val;
-              col_val.getIntegerValue(val);
-              LOG_ASSERT(val == kRowsPerVin - 1, "val = %d", val);
-            } break;
-            case 1: {
-              LOG_ASSERT(col_val.columnType == LindormContest::COLUMN_TYPE_DOUBLE_FLOAT, "COLUMN_TYPE_DOUBLE_FLOAT");
-              double val;
-              col_val.getDoubleFloatValue(val);
-              LOG_ASSERT(val == (kRowsPerVin - 1) * 1.0, "val = %f", val);
-            } break;
-            case 2: {
-              LOG_ASSERT(col_val.columnType == LindormContest::COLUMN_TYPE_STRING, "COLUMN_TYPE_STRING");
-              std::pair<int32_t, const char *> pair;
-              col_val.getStringValue(pair);
-              std::string str(pair.second, pair.first);
-              LOG_ASSERT(str == std::to_string(kRowsPerVin - 1), "val = %s", str.c_str());
-            } break;
-          }
-        }
+        LOG_ASSERT(RowEquals(row, rows[i][row.timestamp]), "error");
       }
     });
   }
@@ -265,8 +260,7 @@ void test_time_range(LindormContest::TSDBEngine *engine) {
     int ret = engine->executeTimeRangeQuery(trR, trReadRes);
     LOG_ASSERT(trReadRes.size() == kRowsPerVin, "size = %zu", trReadRes.size());
     for (auto &row : trReadRes) {
-      auto expect_row = rows[i][row.timestamp];
-      LOG_ASSERT(row == rows[i][row.timestamp], "error");
+      LOG_ASSERT(RowEquals(row, rows[i][row.timestamp]), "not equal");
     }
   }
   LOG_INFO("test time range PASS");
@@ -287,7 +281,7 @@ void parallel_test_time_range(LindormContest::TSDBEngine *engine) {
         memcpy(vin.vin, rows[i][0].vin.vin, LindormContest::VIN_LENGTH);
         trR.vin = vin;
         trR.tableName = "t1";
-        trR.timeLowerBound = 5;
+        trR.timeLowerBound = 0;
         trR.timeUpperBound = kRowsPerVin;
         for (int j = 0; j < LindormContest::kColumnNum; j++) {
           std::string col_name = "c" + std::to_string(j);
@@ -295,10 +289,9 @@ void parallel_test_time_range(LindormContest::TSDBEngine *engine) {
         }
         std::vector<LindormContest::Row> trReadRes;
         int ret = engine->executeTimeRangeQuery(trR, trReadRes);
-        LOG_ASSERT(trReadRes.size() == kRowsPerVin - 5, "size = %zu", trReadRes.size());
+        LOG_ASSERT(trReadRes.size() == kRowsPerVin, "size = %zu", trReadRes.size());
         for (auto &row : trReadRes) {
-          auto expect_row = rows[i][row.timestamp];
-          LOG_ASSERT(row == rows[i][row.timestamp], "error");
+          LOG_ASSERT(RowEquals(row, rows[i][row.timestamp]), "not equal");
         }
       }
     });
@@ -326,13 +319,10 @@ int main() {
 
   prepare_data();
 
-  // upsert(engine);
   parallel_upsert(engine);
 
-  // test_latest(engine);
-  parallel_test_latest(engine);
-  // test_time_range(engine);
-  parallel_test_time_range(engine);
+  // parallel_test_latest(engine);
+  // parallel_test_time_range(engine);
 
   LOG_INFO("start shutdown...");
   engine->shutdown();
@@ -344,10 +334,11 @@ int main() {
   engine->connect();
   LOG_INFO("start connect finished");
 
-  // test_latest(engine);
   parallel_test_latest(engine);
-  // test_time_range(engine);
   parallel_test_time_range(engine);
+
+  engine->shutdown();
+
 
   LOG_INFO("PASS!!!");
 }

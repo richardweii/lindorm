@@ -100,9 +100,6 @@ public:
   void Add(ColumnValue col, int idx) {
     LOG_ASSERT(col.getColumnType() == COLUMN_TYPE_STRING, "column type is %d", col.getColumnType());
 
-    if (idx > cnt)
-      cnt = idx;
-
     std::pair<int32_t, const char *> pair;
     col.getStringValue(pair);
     std::string str(pair.second, pair.first);
@@ -110,13 +107,14 @@ public:
     offsets[idx] = offset;
     datas.append(str);
 
-    offset += pair.first;
+    offset += str.size();
+    offsets[idx + 1] = offset;
   }
 
   // 元数据直接写到内存，内存里面的元数据在shutdown的时候会持久化的
   void Flush(File *file, int cnt, BlockMeta *meta) {
     uint64_t offset = file->GetFileSz();
-    uint64_t writesz1 = cnt * sizeof(uint16_t);
+    uint64_t writesz1 = cnt * sizeof(offsets[0]);
     uint64_t writesz2 = datas.size();
     uint64_t input_sz = writesz1 + writesz2;
     char origin[input_sz];
@@ -142,38 +140,30 @@ public:
     file->read(compress_data_buf, meta->compress_sz[col_id], offset);
     auto ret = LZ4DeCompress(compress_data_buf, origin_data_buf, meta->compress_sz[col_id], meta->origin_sz[col_id]);
     LOG_ASSERT(ret == (int) meta->origin_sz[col_id], "uncompress error");
-    memcpy(offsets, origin_data_buf, sizeof(uint16_t) * meta->num);
-    datas = std::string(origin_data_buf + sizeof(uint16_t) * meta->num, meta->origin_sz[col_id] - sizeof(uint16_t) * meta->num);
-    cnt = meta->num;
+    memcpy(offsets, origin_data_buf, sizeof(offsets[0]) * meta->num);
+    datas = std::string(origin_data_buf + sizeof(offsets[0]) * meta->num, meta->origin_sz[col_id] - sizeof(offsets[0]) * meta->num);
   }
 
   ColumnValue Get(int idx) {
-    uint16_t off = offsets[idx];
-    uint16_t len = 0;
-    if (idx == cnt - 1) {
-      len = datas.size() - off;
-    } else {
-      len = offsets[idx + 1] - offsets[idx];
-    }
-
+    uint32_t off = offsets[idx];
+    uint32_t len = 0;
+    len = offsets[idx + 1] - offsets[idx];
     LOG_ASSERT(len != 0, "len should not be equal 0");
 
-    return ColumnValue(datas.substr(offset, len));
+    return ColumnValue(datas.substr(off, len));
   }
 
   void Reset() {
     offset = 0;
     datas.clear();
-    cnt = 0;
   };
 
   const int col_id;
 
 private:
-  uint16_t offset;
-  uint16_t offsets[kMemtableRowNum];
+  uint32_t offset;
+  uint32_t offsets[kMemtableRowNum + 1];
   std::string datas;
-  int cnt = 0;
 };
 
 class ColumnArrWrapper {
