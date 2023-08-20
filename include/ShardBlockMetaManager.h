@@ -47,10 +47,8 @@ public:
   }
 
   BlockMeta *NewVinBlockMeta(int shard_id, int num, int64_t *min_ts, int64_t *max_ts) {
-    mutex.lock();
-    defer { mutex.unlock(); };
-
     BlockMeta *blk_meta = new BlockMeta(col_num_);
+    LOG_ASSERT(blk_meta != nullptr, "blk_meta == nullptr");
     blk_meta->num = num;
     for (int i = 0; i < kVinNumPerShard; i++) {
       blk_meta->min_ts[i] = min_ts[i];
@@ -74,9 +72,6 @@ public:
 
   // 遍历所有meta，只要是时间戳区间有重合的都返回
   void GetVinBlockMetasByTimeRange(uint16_t vid, int64_t min_ts, int64_t max_ts, OUT std::vector<BlockMeta *> &blk_metas) {
-    mutex.lock();
-    defer { mutex.unlock(); };
-
     blk_metas.clear();
     BlockMeta *p = head[Shard(vid)];
     int idx = vid2idx(vid);
@@ -97,8 +92,6 @@ public:
   //  blk_meta: row_num min_ts[kVinNumPerShard] max_ts[kVinNumPerShard] compress_sz[col_num] origin_sz[col_num] offset[col_num]
   void Save(File *file) {
     LOG_ASSERT(file != nullptr, "error file");
-    mutex.lock();
-    defer { mutex.unlock(); };
 
     for (int shard_id = 0; shard_id < kShardNum; shard_id++) {
       int blk_cnt = block_cnts[shard_id];
@@ -154,9 +147,6 @@ public:
   }
 
   virtual ~ShardBlockMetaManager() {
-    mutex.lock();
-    defer { mutex.unlock(); };
-
     for (int shard_id = 0; shard_id < kShardNum; shard_id++) {
       int num = 0;
       BlockMeta *next = nullptr;
@@ -171,7 +161,7 @@ public:
   }
 
 private:
-  std::mutex mutex;
+  std::mutex mutex[kShardNum];
   int block_cnts[kShardNum]; // 一共下刷了多少个block
   BlockMeta *head[kShardNum];
   int col_num_;

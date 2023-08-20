@@ -59,6 +59,7 @@ static LindormContest::Row rows[kVinNum][kRowsPerVin];
 
 void prepare_data() {
   LOG_INFO("start prepare data...");
+
   for (int i = 0; i < kVinNum; i++) {
     for (int j = 0; j < kRowsPerVin; j++) {
       auto &row = rows[i][j];
@@ -115,11 +116,14 @@ void parallel_upsert(LindormContest::TSDBEngine *engine) {
   const int per_thread_vin_num = kVinNum / thread_num;
   for (int t = 0; t < thread_num; t++) {
     threads.emplace_back([=]() {
-      for (int i = t * per_thread_vin_num; i < (t + 1) * per_thread_vin_num; i++) {
-        for (int j = 0; j < kRowsPerVin; j++) {
+      for (int j = 0; j < kRowsPerVin; j++) {
+        for (int i = t * per_thread_vin_num; i < (t + 1) * per_thread_vin_num; i++) {
           LindormContest::WriteRequest wReq;
           wReq.tableName = "t1";
+          // int k = 0;
+          // for (; i < (t + 1) * per_thread_vin_num && k < 500; k++, i++) {
           wReq.rows.push_back(rows[i][j]);
+          // }
           int ret = engine->upsert(wReq);
         }
       }
@@ -283,7 +287,7 @@ void parallel_test_time_range(LindormContest::TSDBEngine *engine) {
         memcpy(vin.vin, rows[i][0].vin.vin, LindormContest::VIN_LENGTH);
         trR.vin = vin;
         trR.tableName = "t1";
-        trR.timeLowerBound = 0;
+        trR.timeLowerBound = 5;
         trR.timeUpperBound = kRowsPerVin;
         for (int j = 0; j < LindormContest::kColumnNum; j++) {
           std::string col_name = "c" + std::to_string(j);
@@ -291,7 +295,7 @@ void parallel_test_time_range(LindormContest::TSDBEngine *engine) {
         }
         std::vector<LindormContest::Row> trReadRes;
         int ret = engine->executeTimeRangeQuery(trR, trReadRes);
-        LOG_ASSERT(trReadRes.size() == kRowsPerVin, "size = %zu", trReadRes.size());
+        LOG_ASSERT(trReadRes.size() == kRowsPerVin - 5, "size = %zu", trReadRes.size());
         for (auto &row : trReadRes) {
           auto expect_row = rows[i][row.timestamp];
           LOG_ASSERT(row == rows[i][row.timestamp], "error");

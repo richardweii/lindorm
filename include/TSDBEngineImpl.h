@@ -62,6 +62,7 @@ private:
   RWLock vin2vid_lck;
   uint16_t vid_cnt_ = 0;
   std::unordered_map<std::string, uint16_t> vin2vid;
+  std::unordered_map<uint16_t, std::string> vid2vin;
 
   FileManager *file_manager_;
   ShardMemtable *shard_memtable_;

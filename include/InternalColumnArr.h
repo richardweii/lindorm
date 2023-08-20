@@ -148,10 +148,10 @@ public:
   }
 
   ColumnValue Get(int idx) {
-    uint16_t offset = offsets[idx];
+    uint16_t off = offsets[idx];
     uint16_t len = 0;
     if (idx == cnt - 1) {
-      len = datas.size() - offset;
+      len = datas.size() - off;
     } else {
       len = offsets[idx + 1] - offsets[idx];
     }

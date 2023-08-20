@@ -44,13 +44,10 @@ public:
   /**
    * 写入一行数据到memtable，会将其所有列分别加到对应列的数组当中
    */
-  void Add(const Row &row, uint16_t vid);
+  void Add(const Row& row, uint16_t vid);
 
   Row GetLatestRow(uint16_t vid) {
     int idx = vid2idx(vid);
-
-    latest_row_cache_lck[idx].rlock();
-    defer { latest_row_cache_lck[idx].unlock(); };
 
     return latest_row_cache[idx];
   }
@@ -107,14 +104,12 @@ private:
   TsArrWrapper *ts_col;
 
   int cnt_; // 记录这个memtable写了多少行了，由于可能没有写满，然后shutdown刷下去了，所以需要记录一下
-  RWLock mutex;
   int64_t min_ts_[kVinNumPerShard];
   int64_t max_ts_[kVinNumPerShard];
   FileManager *file_manager_;
   ShardBlockMetaManager *block_manager_;
 
   // LatestQueryCache
-  RWLock latest_row_cache_lck[kVinNumPerShard];
   Row latest_row_cache[kVinNumPerShard];
   int64_t latest_ts_cache[kVinNumPerShard];
 };
@@ -131,13 +126,18 @@ public:
   }
 
   void Init() {
+    LOG_INFO("Init ShardMemtable");
     for (int i = 0; i < kShardNum; i++) {
       memtables[i]->Init();
     }
+    LOG_INFO("Init ShardMemtable finished");
   }
 
   void Add(const Row &row, uint16_t vid) {
     int shard_id = Shard(vid);
+
+    rwlcks[shard_id].wlock();
+    defer { rwlcks[shard_id].unlock(); };
 
     memtables[shard_id]->Add(row, vid);
   }
@@ -145,11 +145,17 @@ public:
   Row GetLatestRow(uint16_t vid) {
     int shard_id = Shard(vid);
 
+    rwlcks[shard_id].rlock();
+    defer { rwlcks[shard_id].unlock(); };
+
     return memtables[shard_id]->GetLatestRow(vid);
   }
 
   void GetRowsFromTimeRange(uint64_t vid, int64_t lowerInclusive, int64_t upperExclusive, const std::set<std::string> &requestedColumns, std::vector<Row> &results) {
     int shard_id = Shard(vid);
+
+    rwlcks[shard_id].rlock();
+    defer { rwlcks[shard_id].unlock(); };
 
     memtables[shard_id]->GetRowsFromTimeRange(vid, lowerInclusive, upperExclusive, requestedColumns, results);
   }
@@ -166,6 +172,7 @@ public:
 
 private:
   MemTable *memtables[kShardNum];
+  RWLock rwlcks[kShardNum];
 };
 
 } // namespace LindormContest
