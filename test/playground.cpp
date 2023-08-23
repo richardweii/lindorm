@@ -16,7 +16,6 @@
 #include <string>
 
 #include <fcntl.h>
-#include <libaio.h>
 #include <malloc.h>
 #include <stdio.h>
 

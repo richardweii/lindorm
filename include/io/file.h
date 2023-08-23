@@ -12,19 +12,29 @@ namespace LindormContest {
 
 class File {
 public:
-  virtual Status write(const char *buf, size_t length) { LOG_ASSERT(false, "Not implemented"); };
+  virtual Status write(const char *buf, size_t length) {
+    LOG_ASSERT(false, "Not implemented");
+    return Status::NotSupported;
+  };
 
-  virtual Status read(char *res_buf, size_t length, __off_t pos) { LOG_ASSERT(false, "Not implemented"); }
+  virtual Status read(char *res_buf, size_t length, __off_t pos) {
+    LOG_ASSERT(false, "Not implemented");
+    return Status::NotSupported;
+  }
 
-  virtual Status read(char *res_buf, size_t length) { LOG_ASSERT(false, "Not implemented"); };
+  virtual Status read(char *res_buf, size_t length) {
+    LOG_ASSERT(false, "Not implemented");
+    return Status::NotSupported;
+  };
 
-  virtual off_t GetFileSz() { LOG_ASSERT(false, "Not implemented"); }
+  virtual off_t GetFileSz() {
+    LOG_ASSERT(false, "Not implemented");
+    return -1;
+  }
 
   virtual ~File() = default;
 
-  int Fd() const {
-    return fd_;
-  }
+  int Fd() const { return fd_; }
 
 protected:
   int fd_;
@@ -56,9 +66,7 @@ public:
     return Status::OK;
   };
 
-  off_t GetFileSz() override {
-    return file_sz;
-  }
+  off_t GetFileSz() override { return file_sz; }
 
   virtual ~AppendWriteFile() {
     if (fd_ != -1) {
