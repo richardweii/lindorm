@@ -6,8 +6,10 @@
 #include "io/file_manager.h"
 #include "struct/ColumnValue.h"
 #include "util/logging.h"
+#include "util/stat.h"
 #include <cstdint>
 #include <cstring>
+#include <new>
 #include <string>
 #include <sys/stat.h>
 
@@ -45,15 +47,17 @@ public:
   void Flush(File *file, int cnt, BlockMeta *meta) {
     uint64_t offset = file->GetFileSz();
     uint64_t input_sz = cnt * sizeof(T);
-    uint64_t compress_buf_sz = LZ4MaxDestSize(input_sz);
+    uint64_t compress_buf_sz = max_dest_size_func(input_sz);
     char compress_buf[compress_buf_sz];
-    uint64_t compress_sz = LZ4Compress((const char *) datas, input_sz, compress_buf, compress_buf_sz);
+    uint64_t compress_sz = compress_func((const char *) datas, input_sz, compress_buf, compress_buf_sz);
     auto ret = file->write((const char *) compress_buf, compress_sz);
     LOG_ASSERT(ret == Status::OK, "write failed");
 
     meta->offset[col_id] = offset;
     meta->origin_sz[col_id] = input_sz;
     meta->compress_sz[col_id] = compress_sz;
+    RECORD_ARR_FETCH_ADD(origin_szs, col_id, input_sz);
+    RECORD_ARR_FETCH_ADD(compress_szs, col_id, compress_sz);
   }
 
   void Read(File *file, BlockMeta *meta) {
@@ -63,10 +67,10 @@ public:
 
     struct stat st;
     fstat(file->Fd(), &st);
-    LOG_ASSERT(offset + meta->compress_sz[col_id] <= st.st_size, "offset %lu read size %lu filesz %lu", offset, meta->compress_sz[col_id], st.st_size);
+    LOG_ASSERT(offset + meta->compress_sz[col_id] <= (uint64_t)st.st_size, "offset %lu read size %lu filesz %lu", offset, meta->compress_sz[col_id], st.st_size);
 
     file->read(compress_data_buf, meta->compress_sz[col_id], offset);
-    auto ret = LZ4DeCompress(compress_data_buf, (char *) datas, meta->compress_sz[col_id], meta->origin_sz[col_id]);
+    auto ret = decompress_func(compress_data_buf, (char *) datas, meta->compress_sz[col_id], meta->origin_sz[col_id]);
     LOG_ASSERT(ret == (int) meta->origin_sz[col_id], "uncompress error");
   }
 
@@ -117,31 +121,37 @@ public:
     uint64_t writesz1 = cnt * sizeof(offsets[0]);
     uint64_t writesz2 = datas.size();
     uint64_t input_sz = writesz1 + writesz2;
-    char origin[input_sz];
+    char *origin = new char[input_sz];
     memcpy(origin, offsets, writesz1);
     memcpy(origin + writesz1, datas.c_str(), writesz2);
-    uint64_t compress_buf_sz = LZ4MaxDestSize(input_sz);
-    char compress_buf[compress_buf_sz];
-    uint64_t compress_sz = LZ4Compress((const char *) origin, input_sz, compress_buf, compress_buf_sz);
+    uint64_t compress_buf_sz = max_dest_size_func(input_sz);
+    char *compress_buf = new char[compress_buf_sz];
+    uint64_t compress_sz = compress_func((const char *) origin, input_sz, compress_buf, compress_buf_sz);
 
     auto ret = file->write((const char *) compress_buf, compress_sz);
+    delete[] origin;
+    delete[] compress_buf;
     LOG_ASSERT(ret == Status::OK, "write failed");
 
     meta->offset[col_id] = offset;
     meta->origin_sz[col_id] = input_sz;
     meta->compress_sz[col_id] = compress_sz;
+    RECORD_ARR_FETCH_ADD(origin_szs, col_id, input_sz);
+    RECORD_ARR_FETCH_ADD(compress_szs, col_id, compress_sz);
   }
 
   void Read(File *file, BlockMeta *meta) {
     LOG_ASSERT(meta != nullptr, "error");
-    char compress_data_buf[meta->compress_sz[col_id]];
-    char origin_data_buf[meta->origin_sz[col_id]];
+    char *compress_data_buf = new char[meta->compress_sz[col_id]];
+    char *origin_data_buf = new char[meta->origin_sz[col_id]];
     uint64_t offset = meta->offset[col_id];
     file->read(compress_data_buf, meta->compress_sz[col_id], offset);
-    auto ret = LZ4DeCompress(compress_data_buf, origin_data_buf, meta->compress_sz[col_id], meta->origin_sz[col_id]);
+    auto ret = decompress_func(compress_data_buf, origin_data_buf, meta->compress_sz[col_id], meta->origin_sz[col_id]);
     LOG_ASSERT(ret == (int) meta->origin_sz[col_id], "uncompress error");
     memcpy(offsets, origin_data_buf, sizeof(offsets[0]) * meta->num);
     datas = std::string(origin_data_buf + sizeof(offsets[0]) * meta->num, meta->origin_sz[col_id] - sizeof(offsets[0]) * meta->num);
+    delete[] compress_data_buf;
+    delete[] origin_data_buf;
   }
 
   ColumnValue Get(int idx) {

@@ -14,6 +14,7 @@
 #include "struct/Vin.h"
 #include "util/likely.h"
 #include "util/logging.h"
+#include "util/stat.h"
 #include <atomic>
 #include <cstdint>
 #include <cstdio>
@@ -71,6 +72,7 @@ void TSDBEngineImpl::LoadSchema() {
 }
 
 int TSDBEngineImpl::connect() {
+  print_memory_usage();
   LoadSchema();
 
   // load vin2vid
@@ -106,7 +108,6 @@ int TSDBEngineImpl::connect() {
       SequentialReadFile file(filename);
       shard_memtable_->LoadBlockMeta(i, &file);
       // 删除文件
-      
     }
   }
   LOG_INFO("load block meta finished");
@@ -138,7 +139,7 @@ int TSDBEngineImpl::createTable(const std::string &tableName, const Schema &sche
   for (auto it = schema.columnTypeMap.cbegin(); it != schema.columnTypeMap.cend(); ++it) {
     col2colid.emplace(it->first, i);
 
-    LOG_INFO("[%d] type %d name %s", i, it->second, it->first.c_str());
+    // LOG_INFO("[%d] type %d name %s", i, it->second, it->first.c_str());
     columnsName[i] = it->first;
     columnsType[i++] = it->second;
   }
@@ -177,6 +178,9 @@ int TSDBEngineImpl::shutdown() {
   for (int i = 0; i < kShardNum; i++) {
     shard_memtable_->Flush(i);
   }
+
+  print_summary();
+  print_memory_usage();
 
   // save block meta
   for (int i = 0; i < kShardNum; i++) {
@@ -221,58 +225,24 @@ int TSDBEngineImpl::shutdown() {
 }
 
 int TSDBEngineImpl::upsert(const WriteRequest &writeRequest) {
+  RECORD_FETCH_ADD(write_cnt, writeRequest.rows.size());
   for (auto &row : writeRequest.rows) {
-    vin2vid_lck.rlock();
-    std::string str(row.vin.vin, VIN_LENGTH);
-    auto it = vin2vid.find(str);
-    if (LIKELY(it != vin2vid.cend())) {
-      vin2vid_lck.unlock();
-      // find vid
-      shard_memtable_->Add(row, it->second);
-    } else {
-      vin2vid_lck.unlock();
-      vin2vid_lck.wlock();
-      int vid = -1;
-      it = vin2vid.find(str);
-      if (LIKELY(it == vin2vid.cend())) {
-        vid = vid_cnt_;
-        if (vid % 10000 == 1) {
-          LOG_INFO("vid %d", vid);
-        }
-        if (vid % 10000 == 9999) {
-          LOG_INFO("vid %d", vid);
-        }
-        vid2vin.emplace(std::make_pair(vid_cnt_, str));
-        vin2vid.emplace(std::make_pair(str, vid_cnt_++));
-        vin2vid_lck.unlock();
-      } else {
-        vid = it->second;
-        vin2vid_lck.unlock();
-      }
-      LOG_ASSERT(vid != -1, "vid == -1");
-      shard_memtable_->Add(row, vid);
-    }
+    uint16_t vid = write_get_vid(row.vin);
+    LOG_ASSERT(vid != UINT16_MAX, "error");
+    shard_memtable_->Add(row, vid);
   }
 
   return 0;
 }
 
 int TSDBEngineImpl::executeLatestQuery(const LatestQueryRequest &pReadReq, std::vector<Row> &pReadRes) {
-  static std::atomic<int> latest_log_cnt = 0;
-  if (latest_log_cnt < 10) {
-    LOG_INFO("executeLatestQuery %d, size %zu", latest_log_cnt.load(), pReadReq.vins.size());
-  }
+  RECORD_FETCH_ADD(latest_query_cnt, pReadReq.vins.size());
   for (const auto &vin : pReadReq.vins) {
-    vin2vid_lck.rlock();
-    std::string str(vin.vin, VIN_LENGTH);
-    auto it = vin2vid.find(str);
-    if (it == vin2vid.end()) {
-      vin2vid_lck.unlock();
-      LOG_INFO("executeLatestQuery 查找了一个不存在的vin");
+    uint16_t vid = read_get_vid(vin);
+    if (vid == UINT16_MAX) {
       continue;
     }
-    uint16_t vid = it->second;
-    vin2vid_lck.unlock();
+
     Row row = shard_memtable_->GetLatestRow(vid);
     Row res;
     res.vin = vin;
@@ -287,77 +257,17 @@ int TSDBEngineImpl::executeLatestQuery(const LatestQueryRequest &pReadReq, std::
     pReadRes.push_back(std::move(res));
   }
 
-  if (latest_log_cnt++ < 10) {
-    LOG_INFO("executeLatestQuery %d, done", latest_log_cnt.load());
-  }
   return 0;
 }
 
-static void print_row(Row &row) {
-  printf("ts: %ld | ", row.timestamp);
-  for (auto &col : row.columns) {
-    printf("name %s type: %d ", col.first.c_str(), col.second.getColumnType());
-    printf("val : ");
-    auto col_val = col.second;
-    switch (col.second.getColumnType()) {
-      case COLUMN_TYPE_STRING: {
-        LOG_ASSERT(col_val.columnType == LindormContest::COLUMN_TYPE_STRING, "COLUMN_TYPE_STRING");
-        std::pair<int32_t, const char *> pair;
-        col_val.getStringValue(pair);
-        std::string str(pair.second, pair.first);
-        printf("%s ", str.c_str());
-      } break;
-      case COLUMN_TYPE_INTEGER: {
-        LOG_ASSERT(col_val.columnType == LindormContest::COLUMN_TYPE_INTEGER, "COLUMN_TYPE_INTEGER");
-        int val;
-        col_val.getIntegerValue(val);
-        printf("%d ", val);
-      } break;
-      case COLUMN_TYPE_DOUBLE_FLOAT: {
-        LOG_ASSERT(col_val.columnType == LindormContest::COLUMN_TYPE_DOUBLE_FLOAT, "COLUMN_TYPE_DOUBLE_FLOAT");
-        double val;
-        col_val.getDoubleFloatValue(val);
-        printf("%f ", val);
-      } break;
-      case COLUMN_TYPE_UNINITIALIZED: break;
-    }
-  }
-  printf("\n");
-  fflush(stdout);
-}
-
 int TSDBEngineImpl::executeTimeRangeQuery(const TimeRangeQueryRequest &trReadReq, std::vector<Row> &trReadRes) {
-  static std::atomic<int> time_range_log_cnt = 0;
-  // if (time_range_log_cnt < 10) {
-  //   LOG_INFO(
-  //       "executeTimeRangeQuery %d, low %zu, upper %zu", time_range_log_cnt.load(), trReadReq.timeLowerBound, trReadReq.timeUpperBound);
-  //   printf("trReadReq.requestedColumns: ");
-  //   for (auto &name : trReadReq.requestedColumns) {
-  //     printf("%s | ", name.c_str());
-  //   }
-  //   printf("\n");
-  // }
-
-  vin2vid_lck.rlock();
-  std::string str(trReadReq.vin.vin, VIN_LENGTH);
-  auto it = vin2vid.find(str);
-  if (it == vin2vid.end()) {
-    LOG_INFO("executeTimeRangeQuery 查找了一个不存在的vin");
-    vin2vid_lck.unlock();
+  RECORD_FETCH_ADD(time_range_query_cnt, 1);
+  uint16_t vid = read_get_vid(trReadReq.vin);
+  if (vid == UINT16_MAX) {
     return 0;
   }
-  uint16_t vid = it->second;
-  vin2vid_lck.unlock();
 
   shard_memtable_->GetRowsFromTimeRange(vid, trReadReq.timeLowerBound, trReadReq.timeUpperBound, trReadReq.requestedColumns, trReadRes);
-
-  // if (time_range_log_cnt++ < 10) {
-  //   printf("res num %zu", trReadRes.size());
-  //   for (auto &row : trReadRes) {
-  //     // print_row(row);
-  //   }
-  //   LOG_INFO("executeTimeRangeQuery %d done", time_range_log_cnt.load());
-  // }
 
   return 0;
 }

@@ -2,6 +2,7 @@
 #include "io/file.h"
 #include "struct/Vin.h"
 #include "util/logging.h"
+#include "util/stat.h"
 #include <atomic>
 #include <cstddef>
 #include <cstdint>
@@ -101,6 +102,7 @@ void MemTable::GetRowsFromTimeRange(uint64_t vid, int64_t lowerInclusive, int64_
       }
     }
     if (!idxs.empty()) {
+      RECORD_FETCH_ADD(tr_memtable_blk_query_cnt, idxs.size());
       for (auto idx : idxs) {
         // build res row
         Row resultRow;
@@ -118,6 +120,7 @@ void MemTable::GetRowsFromTimeRange(uint64_t vid, int64_t lowerInclusive, int64_
   std::vector<BlockMeta *> blk_metas;
   block_manager_->GetVinBlockMetasByTimeRange(vid, lowerInclusive, upperExclusive, blk_metas);
   if (!blk_metas.empty()) {
+    RECORD_FETCH_ADD(tr_disk_blk_query_cnt, blk_metas.size());
     for (auto blk_meta : blk_metas) {
       // 去读对应列的block
       ColumnArrWrapper *cols[requestedColumns.size()];

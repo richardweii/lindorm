@@ -12,6 +12,7 @@
 #include "TSDBEngine.hpp"
 #include "io/file_manager.h"
 #include "util/rwlock.h"
+#include <cstdint>
 #include <mutex>
 #include <string>
 #include <unordered_map>
@@ -46,6 +47,51 @@ private:
   friend class MemTable;
   void SaveSchema();
   void LoadSchema();
+
+  uint16_t write_get_vid(const Vin &vin) {
+    uint16_t vid = UINT16_MAX;
+    vin2vid_lck.rlock();
+    std::string str(vin.vin, VIN_LENGTH);
+    auto it = vin2vid.find(str);
+    if (LIKELY(it != vin2vid.cend())) {
+      vin2vid_lck.unlock();
+      vid = it->second;
+    } else {
+      vin2vid_lck.unlock();
+      vin2vid_lck.wlock();
+      it = vin2vid.find(str);
+      if (LIKELY(it == vin2vid.cend())) {
+        vid = vid_cnt_;
+        if (vid % 10000 == 9999) {
+          LOG_INFO("vid %d", vid);
+        }
+        vid2vin.emplace(std::make_pair(vid_cnt_, str));
+        vin2vid.emplace(std::make_pair(str, vid_cnt_++));
+        vin2vid_lck.unlock();
+      } else {
+        vid = it->second;
+        vin2vid_lck.unlock();
+      }
+      LOG_ASSERT(vid != UINT16_MAX, "vid == UINT16_MAX");
+    }
+
+    return vid;
+  }
+
+  uint16_t read_get_vid(const Vin &vin) {
+    vin2vid_lck.rlock();
+    std::string str(vin.vin, VIN_LENGTH);
+    auto it = vin2vid.find(str);
+    if (it == vin2vid.end()) {
+      vin2vid_lck.unlock();
+      LOG_INFO("查找了一个不存在的vin");
+      return UINT16_MAX;
+    }
+    uint16_t vid = it->second;
+    vin2vid_lck.unlock();
+
+    return vid;
+  }
 
   std::string table_name_;
   // How many columns is defined in schema for the sole table.

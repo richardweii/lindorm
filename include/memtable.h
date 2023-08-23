@@ -70,9 +70,9 @@ public:
     ts_col->Reset();
   }
 
-  void SaveBlockMeta(File *file) { block_manager_->Save(file); }
+  void SaveBlockMeta(File *file) { block_manager_->Save(file, shard_id_); }
 
-  void LoadBlockMeta(File *file) { block_manager_->Load(file); }
+  void LoadBlockMeta(File *file) { block_manager_->Load(file, shard_id_); }
 
   void SaveLatestRowCache(File *file);
 

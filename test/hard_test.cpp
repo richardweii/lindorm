@@ -55,7 +55,7 @@ static int createTable(LindormContest::TSDBEngine *engine) {
 }
 
 static constexpr int kVinNum = 30000;
-static constexpr int kRowsPerVin = 10;
+static constexpr int kRowsPerVin = 30;
 static LindormContest::Row rows[kVinNum][kRowsPerVin];
 
 static bool RowEquals(const LindormContest::Row &a, const LindormContest::Row &b) {
@@ -81,6 +81,7 @@ static bool RowEquals(const LindormContest::Row &a, const LindormContest::Row &b
         b_col_val.getStringValue(b_pair);
         std::string b_str(b_pair.second, b_pair.first);
 
+        LOG_ASSERT(a_pair.first == b_pair.first, "a len = %d, b len = %d", a_pair.first, b_pair.first);
         LOG_ASSERT(a_str == b_str, "a_str %s b_str %s", a_str.c_str(), b_str.c_str());
       } break;
       case LindormContest::COLUMN_TYPE_INTEGER: {
@@ -154,7 +155,7 @@ void prepare_data() {
           }
           case 2: {
             // std::string s = RandStr();
-            std::string s = std::string(20, j + '0');
+            std::string s = std::string(100, j + '0');
             LindormContest::ColumnValue col(s);
             LOG_ASSERT(col.columnType == LindormContest::COLUMN_TYPE_STRING, "???");
             row.columns.insert(std::make_pair(col_name, col));
@@ -321,8 +322,8 @@ int main() {
 
   parallel_upsert(engine);
 
-  // parallel_test_latest(engine);
-  // parallel_test_time_range(engine);
+  parallel_test_latest(engine);
+  parallel_test_time_range(engine);
 
   LOG_INFO("start shutdown...");
   engine->shutdown();
