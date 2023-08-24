@@ -67,7 +67,7 @@ public:
 
     struct stat st;
     fstat(file->Fd(), &st);
-    LOG_ASSERT(offset + meta->compress_sz[col_id] <= (uint64_t)st.st_size, "offset %lu read size %lu filesz %lu", offset, meta->compress_sz[col_id], st.st_size);
+    LOG_ASSERT(offset + meta->compress_sz[col_id] <= (uint64_t) st.st_size, "offset %lu read size %lu filesz %lu", offset, meta->compress_sz[col_id], st.st_size);
 
     file->read(compress_data_buf, meta->compress_sz[col_id], offset);
     auto ret = decompress_func(compress_data_buf, (char *) datas, meta->compress_sz[col_id], meta->origin_sz[col_id]);
@@ -257,7 +257,10 @@ public:
 
   ColumnValue Get(int idx) override { return arr->Get(idx); }
 
-  int64_t GetVal(int idx) override { LOG_ASSERT(false, "Not implemented"); }
+  int64_t GetVal(int idx) override {
+    LOG_ASSERT(false, "Not implemented");
+    return -1;
+  }
 
   void Reset() override { arr->Reset(); }
 

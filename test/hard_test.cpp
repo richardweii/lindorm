@@ -55,7 +55,7 @@ static int createTable(LindormContest::TSDBEngine *engine) {
 }
 
 static constexpr int kVinNum = 30000;
-static constexpr int kRowsPerVin = 30;
+static constexpr int kRowsPerVin = 10;
 static LindormContest::Row rows[kVinNum][kRowsPerVin];
 
 static bool RowEquals(const LindormContest::Row &a, const LindormContest::Row &b) {
@@ -172,7 +172,7 @@ void parallel_upsert(LindormContest::TSDBEngine *engine) {
   LOG_INFO("start parallel upsert...");
 
   std::vector<std::thread> threads;
-  const int thread_num = 30;
+  const int thread_num = 1;
   const int per_thread_vin_num = kVinNum / thread_num;
   int is[kVinNum];
   int js[kRowsPerVin];

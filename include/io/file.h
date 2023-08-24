@@ -7,6 +7,7 @@
 #include "util/slice.h"
 #include <fcntl.h>
 #include <unistd.h>
+#include "util/libaio.h"
 
 namespace LindormContest {
 
@@ -32,6 +33,11 @@ public:
     return -1;
   }
 
+  virtual Status async_write(const char *buf, size_t length) {
+    LOG_ASSERT(false, "Not implemented");
+    return Status::NotSupported;
+  }
+
   virtual ~File() = default;
 
   int Fd() const { return fd_; }
@@ -43,7 +49,9 @@ protected:
 class AppendWriteFile : public File {
 public:
   AppendWriteFile(const std::string &filename) : filename(filename) {
+    // fd_ = open(filename.c_str(), O_WRONLY | O_APPEND | O_CREAT | O_DIRECT, 0600);
     fd_ = open(filename.c_str(), O_WRONLY | O_APPEND | O_CREAT, 0600);
+
     LOG_ASSERT(fd_ >= 0, "fd_ is %d", fd_);
   }
 
@@ -65,6 +73,35 @@ public:
 
     return Status::OK;
   };
+
+  static void write_done(io_context_t ctx, struct iocb *iocb, long res, long res2) {
+    LOG_INFO("write done");
+  }
+
+  Status async_write(const char *buf, size_t length) override {
+    io_context_t ctx;
+    memset(&ctx, 0, sizeof(io_context_t));
+    int ret = io_setup(1, &ctx);
+    LOG_ASSERT(ret == 0, "io_setup error ret = %d", ret);
+    struct iocb io, *p = &io;
+    io_prep_pwrite(&io, fd_, (void *) buf, length, file_sz);
+    io_set_callback(&io, write_done);
+    file_sz += length;
+    ret = io_submit(ctx, 1, &p);
+    LOG_ASSERT(ret == 1, "io_submit error");
+
+    struct io_event e;
+    while (1) {
+      if (io_getevents(ctx, ret, ret, &e, NULL) == ret) {
+        io_callback_t cb = (io_callback_t) e.data;
+        cb(ctx, e.obj, e.res, e.res2);
+        break;
+      }
+    }
+
+    io_destroy(ctx);
+    return Status::OK;
+  }
 
   off_t GetFileSz() override { return file_sz; }
 
