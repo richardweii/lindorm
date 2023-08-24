@@ -1,5 +1,7 @@
 #include "memtable.h"
+#include "common.h"
 #include "io/file.h"
+#include "struct/ColumnValue.h"
 #include "struct/Vin.h"
 #include "util/logging.h"
 #include "util/stat.h"
@@ -29,6 +31,8 @@ void MemTable::Init() {
     min_ts_[i] = INT64_MAX;
     max_ts_[i] = INT64_MIN;
     latest_ts_cache[i] = -1;
+    mem_latest_row_idx[i] = -1;
+    mem_latest_row_ts[i] = -1;
   }
 }
 
@@ -38,12 +42,15 @@ void MemTable::Add(const Row &row, uint16_t vid) {
   if (latest_ts_cache[idx] < row.timestamp) {
     latest_ts_cache[idx] = row.timestamp;
     latest_row_cache[idx] = row;
+    // mem_latest_row_ts[idx] = row.timestamp;
+    // mem_latest_row_idx[idx] = cnt_;
   }
 
   for (int i = 0; i < columnsNum_; i++) {
     auto iter = row.columns.find(engine->columnsName[i]);
     LOG_ASSERT(iter != row.columns.end(), "iter == end");
-    columnArrs_[i]->Add(iter->second, cnt_);
+    const auto &col = iter->second;
+    columnArrs_[i]->Add(col, cnt_);
   }
 
   // 写入vid列
@@ -65,6 +72,18 @@ void MemTable::Add(const Row &row, uint16_t vid) {
 void MemTable::Flush() {
   if (cnt_ == 0)
     return;
+
+  // for (int i = 0; i < kVinNumPerShard; i++) {
+  //   if (mem_latest_row_ts[i] > latest_ts_cache[i]) {
+  //     latest_ts_cache[i] = mem_latest_row_ts[i];
+  //     int idx = mem_latest_row_idx[i];
+  //     auto &row = latest_row_cache[i];
+  //     memcpy(row.vin.vin, engine->vid2vin[idx2vid(shard_id_, i)].c_str(), VIN_LENGTH);
+  //     for (int j = 0; j < columnsNum_; j++) {
+  //       row.columns.insert(std::make_pair(engine->columnsName[i], columnArrs_[engine->col2colid[engine->columnsName[i]]]->Get(idx)));
+  //     }
+  //   }
+  // }
 
   BlockMeta *meta = block_manager_->NewVinBlockMeta(shard_id_, cnt_, min_ts_, max_ts_);
   for (int i = 0; i < columnsNum_; i++) {
@@ -109,6 +128,7 @@ void MemTable::GetRowsFromTimeRange(uint64_t vid, int64_t lowerInclusive, int64_
         resultRow.timestamp = ts_col->GetVal(idx);
         memcpy(resultRow.vin.vin, engine->vid2vin[vid].c_str(), VIN_LENGTH);
         for (const auto &requestedColumn : requestedColumns) {
+          ColumnValue col;
           resultRow.columns.insert(std::make_pair(requestedColumn, columnArrs_[engine->col2colid[requestedColumn]]->Get(idx)));
         }
         results.push_back(std::move(resultRow));

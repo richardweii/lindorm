@@ -24,7 +24,7 @@ public:
   ColumnArr(int col_id, ColumnType type) : col_id(col_id), type(type) {}
   virtual ~ColumnArr() {}
 
-  void Add(ColumnValue col, int idx) {
+  void Add(const ColumnValue& col, int idx) {
     switch (col.getColumnType()) {
       case COLUMN_TYPE_STRING: LOG_ASSERT(false, "should not run here"); break;
       case COLUMN_TYPE_INTEGER: {
@@ -101,7 +101,7 @@ public:
   ColumnArr(int col_id) : col_id(col_id), offset(0) {}
   ~ColumnArr() {}
 
-  void Add(ColumnValue col, int idx) {
+  void Add(const ColumnValue& col, int idx) {
     LOG_ASSERT(col.getColumnType() == COLUMN_TYPE_STRING, "column type is %d", col.getColumnType());
 
     std::pair<int32_t, const char *> pair;
@@ -180,12 +180,13 @@ class ColumnArrWrapper {
 public:
   virtual ~ColumnArrWrapper() {}
 
-  virtual void Add(ColumnValue col, int idx) = 0;
+  virtual void Add(const ColumnValue& col, int idx) = 0;
 
   virtual void Flush(File *file, int cnt, BlockMeta *meta) = 0;
 
   virtual void Read(File *file, BlockMeta *meta) = 0;
 
+  // TODO: 减少拷贝
   virtual ColumnValue Get(int idx) = 0;
 
   virtual int64_t GetVal(int idx) = 0;
@@ -201,7 +202,7 @@ public:
 
   ~IntArrWrapper() { delete arr; }
 
-  void Add(ColumnValue col, int idx) override { arr->Add(col, idx); }
+  void Add(const ColumnValue& col, int idx) override { arr->Add(col, idx); }
 
   void Flush(File *file, int cnt, BlockMeta *meta) override { arr->Flush(file, cnt, meta); }
 
@@ -225,7 +226,7 @@ public:
 
   ~DoubleArrWrapper() { delete arr; }
 
-  void Add(ColumnValue col, int idx) override { arr->Add(col, idx); }
+  void Add(const ColumnValue& col, int idx) override { arr->Add(col, idx); }
 
   void Flush(File *file, int cnt, BlockMeta *meta) override { arr->Flush(file, cnt, meta); }
 
@@ -249,7 +250,7 @@ public:
 
   ~StringArrWrapper() { delete arr; }
 
-  void Add(ColumnValue col, int idx) override { arr->Add(col, idx); }
+  void Add(const ColumnValue& col, int idx) override { arr->Add(col, idx); }
 
   void Flush(File *file, int cnt, BlockMeta *meta) override { arr->Flush(file, cnt, meta); }
 
@@ -276,7 +277,7 @@ public:
 
   ~VidArrWrapper() { delete arr; }
 
-  void Add(ColumnValue col, int idx) override { arr->Add(col, idx); }
+  void Add(const ColumnValue& col, int idx) override { arr->Add(col, idx); }
 
   void Flush(File *file, int cnt, BlockMeta *meta) override { arr->Flush(file, cnt, meta); }
 
@@ -300,7 +301,7 @@ public:
 
   ~TsArrWrapper() { delete arr; }
 
-  void Add(ColumnValue col, int idx) override { arr->Add(col, idx); }
+  void Add(const ColumnValue& col, int idx) override { arr->Add(col, idx); }
 
   void Flush(File *file, int cnt, BlockMeta *meta) override { arr->Flush(file, cnt, meta); }
 

@@ -57,7 +57,7 @@ int main() {
   int num = io_getevents(io_context, 1, MAX_EVENT, event, NULL);
   for (int i = 0; i < num; i++) {
     io_callback_t io_callback = (io_callback_t)event[i].data;
-    LOG_INFO("write %d", event[i].res);
+    // LOG_INFO("write %d", event[i].res);
     LOG_ASSERT(event[i].res > 0, "res %zu", event[i].res);
     io_callback(io_context, event[i].obj, event[i].res, event[i].res2);
   }

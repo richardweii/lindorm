@@ -243,14 +243,14 @@ int TSDBEngineImpl::executeLatestQuery(const LatestQueryRequest &pReadReq, std::
       continue;
     }
 
-    Row row = shard_memtable_->GetLatestRow(vid);
+    const Row& row = shard_memtable_->GetLatestRow(vid);
     Row res;
     res.vin = vin;
     res.timestamp = row.timestamp;
     for (const auto &requestedColumn : pReadReq.requestedColumns) {
       auto pair = row.columns.find(requestedColumn);
       LOG_ASSERT(pair != row.columns.end(), "error");
-      auto col = pair->second;
+      const auto& col = pair->second;
       res.columns.insert(std::make_pair(requestedColumn, col));
     }
 

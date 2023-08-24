@@ -46,7 +46,7 @@ public:
    */
   void Add(const Row& row, uint16_t vid);
 
-  Row GetLatestRow(uint16_t vid) {
+  const Row& GetLatestRow(uint16_t vid) {
     int idx = vid2idx(vid);
 
     return latest_row_cache[idx];
@@ -61,6 +61,8 @@ public:
     for (int i = 0; i < kVinNumPerShard; i++) {
       min_ts_[i] = INT64_MAX;
       max_ts_[i] = INT64_MIN;
+      mem_latest_row_idx[i] = -1;
+      mem_latest_row_ts[i] = -1;
     }
     cnt_ = 0;
     for (int i = 0; i < columnsNum_; i++) {
@@ -112,6 +114,10 @@ private:
   // LatestQueryCache
   Row latest_row_cache[kVinNumPerShard];
   int64_t latest_ts_cache[kVinNumPerShard];
+
+  // mem latest row idx and ts
+  int64_t mem_latest_row_idx[kVinNumPerShard];
+  int64_t mem_latest_row_ts[kVinNumPerShard];
 };
 
 /**
@@ -142,7 +148,7 @@ public:
     memtables[shard_id]->Add(row, vid);
   }
 
-  Row GetLatestRow(uint16_t vid) {
+  const Row& GetLatestRow(uint16_t vid) {
     int shard_id = Shard(vid);
 
     rwlcks[shard_id].rlock();
