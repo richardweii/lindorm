@@ -24,7 +24,7 @@ public:
   ColumnArr(int col_id, ColumnType type) : col_id(col_id), type(type) {}
   virtual ~ColumnArr() {}
 
-  void Add(const ColumnValue& col, int idx) {
+  void Add(const ColumnValue &col, int idx) {
     switch (col.getColumnType()) {
       case COLUMN_TYPE_STRING: LOG_ASSERT(false, "should not run here"); break;
       case COLUMN_TYPE_INTEGER: {
@@ -74,14 +74,24 @@ public:
     LOG_ASSERT(ret == (int) meta->origin_sz[col_id], "uncompress error");
   }
 
-  ColumnValue Get(int idx) {
+  void Get(int idx, ColumnValue &value) {
     switch (type) {
       case COLUMN_TYPE_STRING: LOG_ASSERT(false, "should not run here");
-      case COLUMN_TYPE_INTEGER: return ColumnValue((int32_t) datas[idx]);
-      case COLUMN_TYPE_DOUBLE_FLOAT: return ColumnValue((double) datas[idx]);
+      case COLUMN_TYPE_INTEGER: {
+        value.columnType = COLUMN_TYPE_INTEGER;
+        value.columnData = (char *) malloc(sizeof(int32_t));
+        *((int32_t *) value.columnData) = (int32_t) datas[idx];
+        return;
+      }
+      case COLUMN_TYPE_DOUBLE_FLOAT: {
+        value.columnType = COLUMN_TYPE_DOUBLE_FLOAT;
+        value.columnData = (char *) malloc(sizeof(double));
+        *((double *) value.columnData) = (double) datas[idx];
+        return;
+      }
       case COLUMN_TYPE_UNINITIALIZED: LOG_ASSERT(false, "should not run here");
     }
-    return ColumnValue(-1);
+    LOG_ASSERT(false, "should not run here");
   }
 
   int64_t GetVal(int idx) { return datas[idx]; }
@@ -101,7 +111,7 @@ public:
   ColumnArr(int col_id) : col_id(col_id), offset(0) {}
   ~ColumnArr() {}
 
-  void Add(const ColumnValue& col, int idx) {
+  void Add(const ColumnValue &col, int idx) {
     LOG_ASSERT(col.getColumnType() == COLUMN_TYPE_STRING, "column type is %d", col.getColumnType());
 
     std::pair<int32_t, const char *> pair;
@@ -154,13 +164,17 @@ public:
     delete[] origin_data_buf;
   }
 
-  ColumnValue Get(int idx) {
+  void Get(int idx, ColumnValue &value) {
     uint32_t off = offsets[idx];
     uint32_t len = 0;
     len = offsets[idx + 1] - offsets[idx];
     LOG_ASSERT(len != 0, "len should not be equal 0");
 
-    return ColumnValue(datas.substr(off, len));
+    const std::string &res_str = datas.substr(off, len);
+    value.columnType = COLUMN_TYPE_STRING;
+    value.columnData = (char *) malloc(sizeof(int32_t) + res_str.size());
+    *((int32_t *) value.columnData) = (int32_t) res_str.size();
+    std::memcpy(value.columnData + sizeof(int32_t), res_str.data(), res_str.size());
   }
 
   void Reset() {
@@ -180,14 +194,14 @@ class ColumnArrWrapper {
 public:
   virtual ~ColumnArrWrapper() {}
 
-  virtual void Add(const ColumnValue& col, int idx) = 0;
+  virtual void Add(const ColumnValue &col, int idx) = 0;
 
   virtual void Flush(File *file, int cnt, BlockMeta *meta) = 0;
 
   virtual void Read(File *file, BlockMeta *meta) = 0;
 
   // TODO: 减少拷贝
-  virtual ColumnValue Get(int idx) = 0;
+  virtual void Get(int idx, ColumnValue &value) = 0;
 
   virtual int64_t GetVal(int idx) = 0;
 
@@ -202,13 +216,13 @@ public:
 
   ~IntArrWrapper() { delete arr; }
 
-  void Add(const ColumnValue& col, int idx) override { arr->Add(col, idx); }
+  void Add(const ColumnValue &col, int idx) override { arr->Add(col, idx); }
 
   void Flush(File *file, int cnt, BlockMeta *meta) override { arr->Flush(file, cnt, meta); }
 
   void Read(File *file, BlockMeta *meta) override { arr->Read(file, meta); }
 
-  ColumnValue Get(int idx) override { return arr->Get(idx); }
+  void Get(int idx, ColumnValue &value) override { arr->Get(idx, value); }
 
   int64_t GetVal(int idx) override { return arr->GetVal(idx); }
 
@@ -226,13 +240,13 @@ public:
 
   ~DoubleArrWrapper() { delete arr; }
 
-  void Add(const ColumnValue& col, int idx) override { arr->Add(col, idx); }
+  void Add(const ColumnValue &col, int idx) override { arr->Add(col, idx); }
 
   void Flush(File *file, int cnt, BlockMeta *meta) override { arr->Flush(file, cnt, meta); }
 
   void Read(File *file, BlockMeta *meta) override { arr->Read(file, meta); }
 
-  ColumnValue Get(int idx) override { return arr->Get(idx); }
+  void Get(int idx, ColumnValue &value) override { arr->Get(idx, value); }
 
   int64_t GetVal(int idx) override { return arr->GetVal(idx); }
 
@@ -250,13 +264,13 @@ public:
 
   ~StringArrWrapper() { delete arr; }
 
-  void Add(const ColumnValue& col, int idx) override { arr->Add(col, idx); }
+  void Add(const ColumnValue &col, int idx) override { arr->Add(col, idx); }
 
   void Flush(File *file, int cnt, BlockMeta *meta) override { arr->Flush(file, cnt, meta); }
 
   void Read(File *file, BlockMeta *meta) override { arr->Read(file, meta); }
 
-  ColumnValue Get(int idx) override { return arr->Get(idx); }
+  void Get(int idx, ColumnValue &value) override { arr->Get(idx, value); }
 
   int64_t GetVal(int idx) override {
     LOG_ASSERT(false, "Not implemented");
@@ -277,13 +291,13 @@ public:
 
   ~VidArrWrapper() { delete arr; }
 
-  void Add(const ColumnValue& col, int idx) override { arr->Add(col, idx); }
+  void Add(const ColumnValue &col, int idx) override { arr->Add(col, idx); }
 
   void Flush(File *file, int cnt, BlockMeta *meta) override { arr->Flush(file, cnt, meta); }
 
   void Read(File *file, BlockMeta *meta) override { arr->Read(file, meta); }
 
-  ColumnValue Get(int idx) override { return arr->Get(idx); }
+  void Get(int idx, ColumnValue &value) override { arr->Get(idx, value); }
 
   int64_t GetVal(int idx) override { return arr->GetVal(idx); }
 
@@ -301,13 +315,13 @@ public:
 
   ~TsArrWrapper() { delete arr; }
 
-  void Add(const ColumnValue& col, int idx) override { arr->Add(col, idx); }
+  void Add(const ColumnValue &col, int idx) override { arr->Add(col, idx); }
 
   void Flush(File *file, int cnt, BlockMeta *meta) override { arr->Flush(file, cnt, meta); }
 
   void Read(File *file, BlockMeta *meta) override { arr->Read(file, meta); }
 
-  ColumnValue Get(int idx) override { return arr->Get(idx); }
+  void Get(int idx, ColumnValue &value) override { arr->Get(idx, value); }
 
   int64_t GetVal(int idx) override { return arr->GetVal(idx); }
 

@@ -16,7 +16,7 @@ namespace LindormContest {
 constexpr uint32_t kBlockSize = 32 * KB;
 constexpr int kColumnNum = 60;
 constexpr int kVinNum = 30000;
-constexpr int kShardBits = 7;
+constexpr int kShardBits = 10;
 constexpr int kShardNum = 1 << kShardBits; // 按照vin进行分片的数量，最好保证和kVinNum是整除的关系，这样每个分片的vin数量是均匀的
 constexpr int kVinNumPerShard = (kVinNum / kShardNum) + 1; // 打到每个memtable里面vin的个数
 constexpr int kMemtableRowNum = 5000;                // 一个memtable里面最多存储多少行数据

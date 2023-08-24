@@ -129,7 +129,8 @@ void MemTable::GetRowsFromTimeRange(uint64_t vid, int64_t lowerInclusive, int64_
         memcpy(resultRow.vin.vin, engine->vid2vin[vid].c_str(), VIN_LENGTH);
         for (const auto &requestedColumn : requestedColumns) {
           ColumnValue col;
-          resultRow.columns.insert(std::make_pair(requestedColumn, columnArrs_[engine->col2colid[requestedColumn]]->Get(idx)));
+          columnArrs_[engine->col2colid[requestedColumn]]->Get(idx, col);
+          resultRow.columns.insert(std::make_pair(requestedColumn, std::move(col)));
         }
         results.push_back(std::move(resultRow));
       }
@@ -185,7 +186,9 @@ void MemTable::GetRowsFromTimeRange(uint64_t vid, int64_t lowerInclusive, int64_
           resultRow.timestamp = tmp_ts_col->GetVal(idx);
           memcpy(resultRow.vin.vin, engine->vid2vin[vid].c_str(), VIN_LENGTH);
           for (size_t k = 0; k < requestedColumns.size(); k++) {
-            resultRow.columns.insert(std::make_pair(engine->columnsName[cols[k]->GetColid()], cols[k]->Get(idx)));
+            ColumnValue col;
+            cols[k]->Get(idx, col);
+            resultRow.columns.insert(std::make_pair(engine->columnsName[cols[k]->GetColid()], std::move(col)));
           }
           results.push_back(std::move(resultRow));
         }
