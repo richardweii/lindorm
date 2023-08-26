@@ -71,6 +71,7 @@ void TSDBEngineImpl::LoadSchema() {
 
     col2colid.emplace(columnsName[i], i);
   }
+  RemoveFile(getDataPath() + "/schema");
   LOG_INFO("Load Schema finished");
 }
 
@@ -97,6 +98,7 @@ int TSDBEngineImpl::connect() {
         vid2vin.emplace(std::make_pair(vid, vin_str));
       }
       LOG_INFO("load vin2vid finished");
+      RemoveFile(filename);
     }
     vin2vid_lck.unlock();
   }
@@ -111,6 +113,7 @@ int TSDBEngineImpl::connect() {
       SequentialReadFile file(filename);
       shard_memtable_->LoadBlockMeta(i, &file);
       // 删除文件
+      RemoveFile(filename);
     }
   }
   LOG_INFO("load block meta finished");
@@ -122,6 +125,7 @@ int TSDBEngineImpl::connect() {
     if (file_manager_->Exist(filename)) {
       SequentialReadFile file(filename);
       shard_memtable_->LoadLatestRowCache(i, &file);
+      RemoveFile(filename);
     }
   }
   LOG_INFO("load latest row cache finished");
@@ -141,8 +145,6 @@ int TSDBEngineImpl::createTable(const std::string& tableName, const Schema& sche
   int i = 0;
   for (auto it = schema.columnTypeMap.cbegin(); it != schema.columnTypeMap.cend(); ++it) {
     col2colid.emplace(it->first, i);
-
-    // LOG_INFO("[%d] type %d name %s", i, it->second, it->first.c_str());
     columnsName[i] = it->first;
     columnsType[i++] = it->second;
   }

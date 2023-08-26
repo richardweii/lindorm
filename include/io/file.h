@@ -4,6 +4,8 @@
 #include <fcntl.h>
 #include <unistd.h>
 
+#include <cstdio>
+
 #include "status.h"
 #include "util/libaio.h"
 #include "util/likely.h"
@@ -11,6 +13,16 @@
 #include "util/slice.h"
 
 namespace LindormContest {
+
+inline void RemoveFile(std::string file_name) {
+  if (access(file_name.c_str(), F_OK) != -1) {
+    if (remove(file_name.c_str()) == 0) {
+      // LOG_INFO("删除文件 %s 成功", file_name.c_str());
+    } else {
+      // LOG_INFO("删除文件 %s 失败", file_name.c_str());
+    }
+  }
+}
 
 class File {
 public:

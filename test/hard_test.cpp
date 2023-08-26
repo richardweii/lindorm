@@ -345,7 +345,7 @@ int main() {
   parallel_test_latest(engine);
   parallel_test_time_range(engine);
 
-  engine->shutdown();
+  // engine->shutdown();
 
   LOG_INFO("PASS!!!");
 }
