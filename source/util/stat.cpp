@@ -1,4 +1,5 @@
 #include "util/stat.h"
+#include "TSDBEngineImpl.h"
 #include "common.h"
 #include "util/logging.h"
 #include <atomic>
@@ -19,23 +20,42 @@ std::atomic<int64_t> tr_disk_blk_query_cnt{0};     // time range遍历的磁盘�
 
 std::atomic<int64_t> origin_szs[kColumnNum + kExtraColNum];
 std::atomic<int64_t> compress_szs[kColumnNum + kExtraColNum];
+std::string types[] = {
+    "NULL",
+    "string",
+    "Integer",
+    "double",
+};
 
-void print_summary() {
+void print_summary(ColumnType *columnsType, std::string *columnsName) {
   LOG_INFO("*********STAT SUMMARY*********");
   LOG_INFO("write_cnt: %ld", write_cnt.load());
   LOG_INFO("latest_query_cnt: %ld", latest_query_cnt.load());
   LOG_INFO("time_range_query_cnt: %ld", time_range_query_cnt.load());
   LOG_INFO("tr_memtable_blk_query_cnt: %ld", tr_memtable_blk_query_cnt.load());
   LOG_INFO("tr_disk_blk_query_cnt: %ld", tr_disk_blk_query_cnt.load());
-  for (int i = 0; i < kColumnNum + kExtraColNum; i++) {
-    LOG_INFO("col %d compress rate is %f", i, (compress_szs[i] * 1.0) / (origin_szs[i] * 1.0));
+  for (int i = 0; i < kColumnNum; i++) {
+    LOG_INFO("col %d col_name %s, col_type %s, origin_sz %ld MB, compress_sz %ld MB compress rate is %f",
+             i,
+             columnsName[i].c_str(),
+             types[columnsType[i]].c_str(),
+             origin_szs[i].load() / MB,
+             compress_szs[i].load() / MB,
+             (compress_szs[i] * 1.0) / (origin_szs[i] * 1.0));
+  }
+  for (int i = kColumnNum; i < kColumnNum + kExtraColNum; i++) {
+    LOG_INFO("col %d, origin_sz %ld MB, compress_sz %ld MB compress rate is %f",
+             i,
+             origin_szs[i].load() / MB,
+             compress_szs[i].load() / MB,
+             (compress_szs[i] * 1.0) / (origin_szs[i] * 1.0));
   }
 }
 
-void print_row(Row &row) {
-  printf("ts: %ld | ", row.timestamp);
+void print_row(const Row &row, uint16_t vid) {
+  printf("vid %d, ts: %ld | ", vid, row.timestamp);
   for (auto &col : row.columns) {
-    printf("name %s type: %d ", col.first.c_str(), col.second.getColumnType());
+    printf("col_name %s type: %s ", col.first.c_str(), types[col.second.getColumnType()].c_str());
     printf("val : ");
     auto col_val = col.second;
     switch (col.second.getColumnType()) {
@@ -60,6 +80,7 @@ void print_row(Row &row) {
       } break;
       case COLUMN_TYPE_UNINITIALIZED: break;
     }
+    printf(" | ");
   }
   printf("\n");
   fflush(stdout);

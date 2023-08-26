@@ -21,6 +21,7 @@
 #include <cstring>
 #include <filesystem>
 #include <fstream>
+#include <mutex>
 #include <sstream>
 #include <utility>
 
@@ -179,7 +180,7 @@ int TSDBEngineImpl::shutdown() {
     shard_memtable_->Flush(i);
   }
 
-  print_summary();
+  print_summary(columnsType, columnsName);
   print_memory_usage();
 
   // save block meta
@@ -224,13 +225,42 @@ int TSDBEngineImpl::shutdown() {
   return 0;
 }
 
+// static std::atomic<int> flag = 0;
+// int cnt[kVinNum] = {0};
+// std::mutex mutex;
+
 int TSDBEngineImpl::upsert(const WriteRequest &writeRequest) {
+  static std::atomic<int> upsert_cnt = 0;
   RECORD_FETCH_ADD(write_cnt, writeRequest.rows.size());
+
   for (auto &row : writeRequest.rows) {
     uint16_t vid = write_get_vid(row.vin);
+    if (vid == 0 && upsert_cnt++ < 100) {
+      print_row(row, vid);
+    }
     LOG_ASSERT(vid != UINT16_MAX, "error");
     shard_memtable_->Add(row, vid);
   }
+
+  // if (flag.load() < 10) {
+  //   mutex.lock();
+  //   if (flag.load() < 10) {
+  //     flag += 1;
+  //     memset(cnt, 0, sizeof(int)*kVinNum);
+  //     for (auto &row : writeRequest.rows) {
+  //       uint16_t vid = write_get_vid(row.vin);
+  //       cnt[vid]++;
+  //     }
+  //     printf("*************\n");
+  //     for (int i = 0; i < kVinNum; i++) {
+  //       if (cnt[i] != 0) {
+  //         printf("vid %d cnt %d | ", i, cnt[i]);
+  //       }
+  //     }
+  //     printf("\n*************\n");
+  //   }
+  //   mutex.unlock();
+  // }
 
   return 0;
 }
@@ -243,14 +273,14 @@ int TSDBEngineImpl::executeLatestQuery(const LatestQueryRequest &pReadReq, std::
       continue;
     }
 
-    const Row& row = shard_memtable_->GetLatestRow(vid);
+    const Row &row = shard_memtable_->GetLatestRow(vid);
     Row res;
     res.vin = vin;
     res.timestamp = row.timestamp;
     for (const auto &requestedColumn : pReadReq.requestedColumns) {
       auto pair = row.columns.find(requestedColumn);
       LOG_ASSERT(pair != row.columns.end(), "error");
-      const auto& col = pair->second;
+      const auto &col = pair->second;
       res.columns.insert(std::make_pair(requestedColumn, col));
     }
 
