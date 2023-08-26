@@ -17,3 +17,6 @@ target_link_libraries(playground lindorm)
 
 add_executable(column_usage ColumnValueUsageSample.cpp)
 target_link_libraries(column_usage lindorm)
+
+add_executable(interval_tree interval_tree_test.cpp)
+target_link_libraries(interval_tree lindorm)

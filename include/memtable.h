@@ -12,6 +12,7 @@
 #include "struct/Row.h"
 #include "struct/Vin.h"
 #include "util/defer.h"
+#include "util/interval_tree.h"
 #include "util/logging.h"
 #include "util/rwlock.h"
 #include <cstdint>
@@ -27,12 +28,20 @@ public:
         cnt_(0),
         file_manager_(engine->file_manager_) {
     block_manager_ = new ShardBlockMetaManager(columnsNum_ + kExtraColNum);
+    for (int i = 0; i < kVinNumPerShard; i++) {
+      interval_trees[i] = nullptr;
+    }
   }
 
   virtual ~MemTable() {
     for (int i = 0; i < columnsNum_; i++) {
       LOG_ASSERT(columnArrs_[i] != nullptr, "nullptr");
       delete columnArrs_[i];
+    }
+    for (int i = 0; i < kVinNumPerShard; i++) {
+      if (interval_trees[i] != nullptr) {
+        delete interval_trees[i];
+      }
     }
     delete[] columnArrs_;
     delete vid_col;
@@ -44,9 +53,9 @@ public:
   /**
    * 写入一行数据到memtable，会将其所有列分别加到对应列的数组当中
    */
-  void Add(const Row& row, uint16_t vid);
+  void Add(const Row &row, uint16_t vid);
 
-  const Row& GetLatestRow(uint16_t vid) {
+  const Row &GetLatestRow(uint16_t vid) {
     int idx = vid2idx(vid);
 
     return latest_row_cache[idx];
@@ -74,13 +83,19 @@ public:
 
   void SaveBlockMeta(File *file) { block_manager_->Save(file, shard_id_); }
 
-  void LoadBlockMeta(File *file) { block_manager_->Load(file, shard_id_); }
+  void LoadBlockMeta(File *file) {
+    for (int i = 0; i < kVinNumPerShard; i++) {
+      interval_trees[i] = new IntervalTree();
+    }
+    block_manager_->Load(file, shard_id_, interval_trees);
+  }
 
   void SaveLatestRowCache(File *file);
 
   void LoadLatestRowCache(File *file);
 
 private:
+  friend class ShardBlockMetaManager;
   void updateTs(const int64_t ts, int vid) {
     int idx = vid2idx(vid);
     if (ts < min_ts_[idx]) {
@@ -118,6 +133,9 @@ private:
   // mem latest row idx and ts
   int64_t mem_latest_row_idx[kVinNumPerShard];
   int64_t mem_latest_row_ts[kVinNumPerShard];
+
+  // 区间查询树，用于加速time range的查找
+  IntervalTree *interval_trees[kVinNumPerShard];
 };
 
 /**
@@ -148,7 +166,7 @@ public:
     memtables[shard_id]->Add(row, vid);
   }
 
-  const Row& GetLatestRow(uint16_t vid) {
+  const Row &GetLatestRow(uint16_t vid) {
     int shard_id = Shard(vid);
 
     rwlcks[shard_id].rlock();

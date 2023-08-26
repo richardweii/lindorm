@@ -230,14 +230,14 @@ int TSDBEngineImpl::shutdown() {
 // std::mutex mutex;
 
 int TSDBEngineImpl::upsert(const WriteRequest &writeRequest) {
-  static std::atomic<int> upsert_cnt = 0;
+  // static std::atomic<int> upsert_cnt = 0;
   RECORD_FETCH_ADD(write_cnt, writeRequest.rows.size());
 
   for (auto &row : writeRequest.rows) {
     uint16_t vid = write_get_vid(row.vin);
-    if (vid == 0 && upsert_cnt++ < 100) {
-      print_row(row, vid);
-    }
+    // if (vid == 0 && upsert_cnt++ < 100) {
+    //   print_row(row, vid);
+    // }
     LOG_ASSERT(vid != UINT16_MAX, "error");
     shard_memtable_->Add(row, vid);
   }
