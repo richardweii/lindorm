@@ -292,13 +292,16 @@ int TSDBEngineImpl::executeLatestQuery(const LatestQueryRequest& pReadReq, std::
 
 int TSDBEngineImpl::executeTimeRangeQuery(const TimeRangeQueryRequest& trReadReq, std::vector<Row>& trReadRes) {
   RECORD_FETCH_ADD(time_range_query_cnt, 1);
+  std::vector<int> colids;
+  for (auto& col_name : trReadReq.requestedColumns) {
+    colids.emplace_back(col2colid[col_name]);
+  }
   uint16_t vid = read_get_vid(trReadReq.vin);
   if (vid == UINT16_MAX) {
     return 0;
   }
 
-  shard_memtable_->GetRowsFromTimeRange(vid, trReadReq.timeLowerBound, trReadReq.timeUpperBound,
-                                        trReadReq.requestedColumns, trReadRes);
+  shard_memtable_->GetRowsFromTimeRange(vid, trReadReq.timeLowerBound, trReadReq.timeUpperBound, colids, trReadRes);
 
   return 0;
 }

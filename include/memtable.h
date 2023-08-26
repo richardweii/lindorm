@@ -85,7 +85,7 @@ public:
   void Flush();
 
   void GetRowsFromTimeRange(uint64_t vid, int64_t lowerInclusive, int64_t upperExclusive,
-                            const std::set<std::string>& requestedColumns, std::vector<Row>& results);
+                            std::vector<int> colids, std::vector<Row>& results);
 
   // 清空状态
   void Reset() {
@@ -202,13 +202,13 @@ public:
   }
 
   void GetRowsFromTimeRange(uint64_t vid, int64_t lowerInclusive, int64_t upperExclusive,
-                            const std::set<std::string>& requestedColumns, std::vector<Row>& results) {
+                            std::vector<int> colids, std::vector<Row>& results) {
     int shard_id = Shard(vid);
 
     rwlcks[shard_id].rlock();
     defer { rwlcks[shard_id].unlock(); };
 
-    memtables[shard_id]->GetRowsFromTimeRange(vid, lowerInclusive, upperExclusive, requestedColumns, results);
+    memtables[shard_id]->GetRowsFromTimeRange(vid, lowerInclusive, upperExclusive, colids, results);
   }
 
   void Flush(int shard_id) { memtables[shard_id]->Flush(); }

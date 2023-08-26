@@ -141,7 +141,7 @@ void MemTable::Flush() {
 }
 
 void MemTable::GetRowsFromTimeRange(uint64_t vid, int64_t lowerInclusive, int64_t upperExclusive,
-                                    const std::set<std::string>& requestedColumns, std::vector<Row>& results) {
+                                    std::vector<int> colids, std::vector<Row>& results) {
   // 首先看memtable当中是否有符合要求的数据
   int idx = vid2idx(vid);
   if (!(min_ts_[idx] >= upperExclusive || max_ts_[idx] < lowerInclusive)) {
@@ -159,10 +159,10 @@ void MemTable::GetRowsFromTimeRange(uint64_t vid, int64_t lowerInclusive, int64_
         Row resultRow;
         resultRow.timestamp = ts_col->GetVal(idx);
         memcpy(resultRow.vin.vin, engine->vid2vin[vid].c_str(), VIN_LENGTH);
-        for (const auto& requestedColumn : requestedColumns) {
+        for (const auto col_id : colids) {
           ColumnValue col;
-          columnArrs_[engine->col2colid[requestedColumn]]->Get(idx, col);
-          resultRow.columns.insert(std::make_pair(requestedColumn, std::move(col)));
+          columnArrs_[col_id]->Get(idx, col);
+          resultRow.columns.insert(std::make_pair(engine->columnsName[col_id], std::move(col)));
         }
         results.push_back(std::move(resultRow));
       }
@@ -184,30 +184,29 @@ void MemTable::GetRowsFromTimeRange(uint64_t vid, int64_t lowerInclusive, int64_
     RECORD_FETCH_ADD(tr_disk_blk_query_cnt, blk_metas.size());
     for (auto blk_meta : blk_metas) {
       // 去读对应列的block
-      ColumnArrWrapper* cols[requestedColumns.size()];
+      ColumnArrWrapper* cols[colids.size()];
       VidArrWrapper* tmp_vid_col = new VidArrWrapper(columnsNum_);
       TsArrWrapper* tmp_ts_col = new TsArrWrapper(columnsNum_ + 1);
       IdxArrWrapper* tmp_idx_col = new IdxArrWrapper(columnsNum_ + 2);
 
       int icol_idx = 0;
-      for (const auto& requestedColumn : requestedColumns) {
-        auto idx = engine->col2colid[requestedColumn];
-        switch (engine->columnsType[idx]) {
+      for (const auto col_id : colids) {
+        switch (engine->columnsType[col_id]) {
           case COLUMN_TYPE_STRING:
-            cols[icol_idx] = new StringArrWrapper(idx);
+            cols[icol_idx] = new StringArrWrapper(col_id);
             break;
           case COLUMN_TYPE_INTEGER:
-            cols[icol_idx] = new IntArrWrapper(idx);
+            cols[icol_idx] = new IntArrWrapper(col_id);
             break;
           case COLUMN_TYPE_DOUBLE_FLOAT:
-            cols[icol_idx] = new DoubleArrWrapper(idx);
+            cols[icol_idx] = new DoubleArrWrapper(col_id);
             break;
           case COLUMN_TYPE_UNINITIALIZED:
             LOG_ASSERT(false, "error");
             break;
         }
         std::string file_name =
-          ColFileName(engine->dataDirPath, engine->table_name_, shard_id_, engine->columnsName[idx]);
+          ColFileName(engine->dataDirPath, engine->table_name_, shard_id_, engine->columnsName[col_id]);
         RandomAccessFile file(file_name);
         cols[icol_idx++]->Read(&file, blk_meta);
       }
@@ -242,7 +241,7 @@ void MemTable::GetRowsFromTimeRange(uint64_t vid, int64_t lowerInclusive, int64_
           Row resultRow;
           resultRow.timestamp = tss[i];
           memcpy(resultRow.vin.vin, engine->vid2vin[vid].c_str(), VIN_LENGTH);
-          for (size_t k = 0; k < requestedColumns.size(); k++) {
+          for (size_t k = 0; k < colids.size(); k++) {
             ColumnValue col;
             cols[k]->Get(idxs[i], col);
             resultRow.columns.insert(std::make_pair(engine->columnsName[cols[k]->GetColid()], std::move(col)));
@@ -251,7 +250,7 @@ void MemTable::GetRowsFromTimeRange(uint64_t vid, int64_t lowerInclusive, int64_
         }
       }
 
-      for (size_t k = 0; k < requestedColumns.size(); k++) {
+      for (size_t k = 0; k < colids.size(); k++) {
         delete cols[k];
       }
 

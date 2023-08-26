@@ -23,7 +23,23 @@ namespace LindormContest {
 template <typename T>
 class ColumnArr {
 public:
-  ColumnArr(int col_id, ColumnType type) : col_id(col_id), type(type) {}
+  ColumnArr(int col_id, ColumnType type) : col_id(col_id), type(type) {
+    // switch (type) {
+    //   case COLUMN_TYPE_STRING:
+    //     LOG_ASSERT(false, "should not run here");
+    //     break;
+    //   case COLUMN_TYPE_INTEGER: {
+    //     max = (T) INT64_MIN;
+    //     break;
+    //   }
+    //   case COLUMN_TYPE_DOUBLE_FLOAT: {
+    //     max = (T) -999999.0;
+    //     break;
+    //   }
+    //   case COLUMN_TYPE_UNINITIALIZED:
+    //     break;
+    // }
+  }
   virtual ~ColumnArr() {}
 
   void Add(const ColumnValue& col, int idx) {
@@ -35,12 +51,18 @@ public:
         int val;
         col.getIntegerValue(val);
         datas[idx] = (T)val;
+        // if (val > max) {
+        //   max = val;
+        // }
         break;
       }
       case COLUMN_TYPE_DOUBLE_FLOAT: {
         double val;
         col.getDoubleFloatValue(val);
         datas[idx] = (T)val;
+        // if (val > max) {
+        //   max = val;
+        // }
         break;
       }
       case COLUMN_TYPE_UNINITIALIZED:
@@ -119,6 +141,7 @@ public:
   const int col_id;
 
   T datas[kMemtableRowNum];
+  // T max;
   ColumnType type;
 };
 
