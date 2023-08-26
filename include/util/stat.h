@@ -2,6 +2,7 @@
 
 #include <atomic>
 #include <chrono>
+
 #include "struct/Row.h"
 
 namespace LindormContest {
@@ -34,7 +35,7 @@ extern std::atomic<int64_t> compress_szs[];
 #define RECORD_ARR_FETCH_ADD(nums, idx, delta)
 #endif
 
-void print_summary(ColumnType *columnsType, std::string *columnsName);
-void print_row(const Row &row, uint16_t vid);
+void print_summary(ColumnType* columnsType, std::string* columnsName);
+void print_row(const Row& row, uint16_t vid);
 void print_memory_usage();
-}
+} // namespace LindormContest

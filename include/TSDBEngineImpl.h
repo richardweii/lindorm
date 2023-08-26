@@ -8,14 +8,15 @@
 #ifndef LINDORMTSDBCONTESTCPP_TSDBENGINEIMPL_H
 #define LINDORMTSDBCONTESTCPP_TSDBENGINEIMPL_H
 
-#include "Hasher.hpp"
-#include "TSDBEngine.hpp"
-#include "io/file_manager.h"
-#include "util/rwlock.h"
 #include <cstdint>
 #include <mutex>
 #include <string>
 #include <unordered_map>
+
+#include "Hasher.hpp"
+#include "TSDBEngine.hpp"
+#include "io/file_manager.h"
+#include "util/rwlock.h"
 
 namespace LindormContest {
 
@@ -27,19 +28,19 @@ public:
    * Our evaluation program will call this constructor.
    * The function's body can be modified.
    */
-  explicit TSDBEngineImpl(const std::string &dataDirPath);
+  explicit TSDBEngineImpl(const std::string& dataDirPath);
 
   int connect() override;
 
-  int createTable(const std::string &tableName, const Schema &schema) override;
+  int createTable(const std::string& tableName, const Schema& schema) override;
 
   int shutdown() override;
 
-  int upsert(const WriteRequest &wReq) override;
+  int upsert(const WriteRequest& wReq) override;
 
-  int executeLatestQuery(const LatestQueryRequest &pReadReq, std::vector<Row> &pReadRes) override;
+  int executeLatestQuery(const LatestQueryRequest& pReadReq, std::vector<Row>& pReadRes) override;
 
-  int executeTimeRangeQuery(const TimeRangeQueryRequest &trReadReq, std::vector<Row> &trReadRes) override;
+  int executeTimeRangeQuery(const TimeRangeQueryRequest& trReadReq, std::vector<Row>& trReadRes) override;
 
   ~TSDBEngineImpl() override;
 
@@ -48,7 +49,7 @@ private:
   void SaveSchema();
   void LoadSchema();
 
-  uint16_t write_get_vid(const Vin &vin) {
+  uint16_t write_get_vid(const Vin& vin) {
     uint16_t vid = UINT16_MAX;
     vin2vid_lck.rlock();
     std::string str(vin.vin, VIN_LENGTH);
@@ -78,7 +79,7 @@ private:
     return vid;
   }
 
-  uint16_t read_get_vid(const Vin &vin) {
+  uint16_t read_get_vid(const Vin& vin) {
     vin2vid_lck.rlock();
     std::string str(vin.vin, VIN_LENGTH);
     auto it = vin2vid.find(str);
@@ -97,9 +98,9 @@ private:
   // How many columns is defined in schema for the sole table.
   int columnsNum;
   // The column's type for each column.
-  ColumnType *columnsType = nullptr;
+  ColumnType* columnsType = nullptr;
   // The column's name for each column.
-  std::string *columnsName = nullptr;
+  std::string* columnsName = nullptr;
 
   // 用于存储 列名到其在schema中下标的映射
   std::unordered_map<std::string, int> col2colid;
@@ -110,8 +111,8 @@ private:
   std::unordered_map<std::string, uint16_t> vin2vid;
   std::unordered_map<uint16_t, std::string> vid2vin;
 
-  FileManager *file_manager_;
-  ShardMemtable *shard_memtable_;
+  FileManager* file_manager_;
+  ShardMemtable* shard_memtable_;
 }; // End class TSDBEngineImpl.
 
 } // namespace LindormContest

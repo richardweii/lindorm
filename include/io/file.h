@@ -1,29 +1,30 @@
 #ifndef _FILE_H_
 #define _FILE_H_
 
+#include <fcntl.h>
+#include <unistd.h>
+
 #include "status.h"
+#include "util/libaio.h"
 #include "util/likely.h"
 #include "util/logging.h"
 #include "util/slice.h"
-#include <fcntl.h>
-#include <unistd.h>
-#include "util/libaio.h"
 
 namespace LindormContest {
 
 class File {
 public:
-  virtual Status write(const char *buf, size_t length) {
+  virtual Status write(const char* buf, size_t length) {
     LOG_ASSERT(false, "Not implemented");
     return Status::NotSupported;
   };
 
-  virtual Status read(char *res_buf, size_t length, __off_t pos) {
+  virtual Status read(char* res_buf, size_t length, __off_t pos) {
     LOG_ASSERT(false, "Not implemented");
     return Status::NotSupported;
   }
 
-  virtual Status read(char *res_buf, size_t length) {
+  virtual Status read(char* res_buf, size_t length) {
     LOG_ASSERT(false, "Not implemented");
     return Status::NotSupported;
   };
@@ -33,7 +34,7 @@ public:
     return -1;
   }
 
-  virtual Status async_write(const char *buf, size_t length) {
+  virtual Status async_write(const char* buf, size_t length) {
     LOG_ASSERT(false, "Not implemented");
     return Status::NotSupported;
   }
@@ -48,14 +49,14 @@ protected:
 
 class AppendWriteFile : public File {
 public:
-  AppendWriteFile(const std::string &filename) : filename(filename) {
+  AppendWriteFile(const std::string& filename) : filename(filename) {
     // fd_ = open(filename.c_str(), O_WRONLY | O_APPEND | O_CREAT | O_DIRECT, 0600);
     fd_ = open(filename.c_str(), O_WRONLY | O_APPEND | O_CREAT, 0600);
 
     LOG_ASSERT(fd_ >= 0, "fd_ is %d", fd_);
   }
 
-  Status write(const char *buf, size_t length) override {
+  Status write(const char* buf, size_t length) override {
     file_sz += length;
 
     while (length > 0) {
@@ -74,17 +75,15 @@ public:
     return Status::OK;
   };
 
-  static void write_done(io_context_t ctx, struct iocb *iocb, long res, long res2) {
-    LOG_INFO("write done");
-  }
+  static void write_done(io_context_t ctx, struct iocb* iocb, long res, long res2) { LOG_INFO("write done"); }
 
-  Status async_write(const char *buf, size_t length) override {
+  Status async_write(const char* buf, size_t length) override {
     io_context_t ctx;
     memset(&ctx, 0, sizeof(io_context_t));
     int ret = io_setup(1, &ctx);
     LOG_ASSERT(ret == 0, "io_setup error ret = %d", ret);
     struct iocb io, *p = &io;
-    io_prep_pwrite(&io, fd_, (void *) buf, length, file_sz);
+    io_prep_pwrite(&io, fd_, (void*)buf, length, file_sz);
     io_set_callback(&io, write_done);
     file_sz += length;
     ret = io_submit(ctx, 1, &p);
@@ -93,7 +92,7 @@ public:
     struct io_event e;
     while (1) {
       if (io_getevents(ctx, ret, ret, &e, NULL) == ret) {
-        io_callback_t cb = (io_callback_t) e.data;
+        io_callback_t cb = (io_callback_t)e.data;
         cb(ctx, e.obj, e.res, e.res2);
         break;
       }
@@ -118,9 +117,9 @@ private:
 
 class SequentialReadFile : public File {
 public:
-  SequentialReadFile(const std::string &filename) : filename(filename) { fd_ = open(filename.c_str(), O_RDONLY, 0600); }
+  SequentialReadFile(const std::string& filename) : filename(filename) { fd_ = open(filename.c_str(), O_RDONLY, 0600); }
 
-  Status read(char *res_buf, size_t length) override {
+  Status read(char* res_buf, size_t length) override {
     while (length > 0) {
       ssize_t read_result = ::read(fd_, res_buf, length);
       if (read_result == 0) {
@@ -152,9 +151,9 @@ private:
 
 class RandomAccessFile : public File {
 public:
-  RandomAccessFile(const std::string &filename) : filename(filename) { fd_ = open(filename.c_str(), O_RDONLY, 0600); }
+  RandomAccessFile(const std::string& filename) : filename(filename) { fd_ = open(filename.c_str(), O_RDONLY, 0600); }
 
-  Status read(char *res_buf, size_t length, __off_t pos) override {
+  Status read(char* res_buf, size_t length, __off_t pos) override {
     ::lseek(fd_, pos, SEEK_SET);
     while (length > 0) {
       ssize_t read_result = ::read(fd_, res_buf, length);

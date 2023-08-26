@@ -1,12 +1,14 @@
 #pragma once
 
-#include "io/file.h"
-#include "util/defer.h"
 #include <fcntl.h>
+
 #include <fstream>
 #include <mutex>
 #include <string>
 #include <unordered_map>
+
+#include "io/file.h"
+#include "util/defer.h"
 
 namespace LindormContest {
 
@@ -15,11 +17,9 @@ namespace LindormContest {
  */
 class FileManager {
 public:
-  bool Exist(std::string filename) {
-    return access(filename.c_str(), F_OK) != -1;
-  }
+  bool Exist(std::string filename) { return access(filename.c_str(), F_OK) != -1; }
 
-  File *Open(std::string filename) {
+  File* Open(std::string filename) {
     globalMutex.lock();
     defer { globalMutex.unlock(); };
 
@@ -29,13 +29,13 @@ public:
       return pFileOut;
     }
 
-    File *file = new AppendWriteFile(filename);
+    File* file = new AppendWriteFile(filename);
     outFiles.insert(std::make_pair(filename, file));
     return file;
   }
 
   virtual ~FileManager() {
-    for (const auto &pair : outFiles) {
+    for (const auto& pair : outFiles) {
       delete pair.second;
     }
   }
@@ -43,7 +43,7 @@ public:
 private:
   // TODO: 后续自己实现哈希表，细粒度锁
   std::mutex globalMutex;
-  std::unordered_map<std::string, File *> outFiles;
+  std::unordered_map<std::string, File*> outFiles;
 };
 
 } // namespace LindormContest

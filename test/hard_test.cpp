@@ -1,10 +1,3 @@
-#include "Hasher.hpp"
-#include "TSDBEngineImpl.h"
-#include "common.h"
-#include "struct/ColumnValue.h"
-#include "struct/Vin.h"
-#include "test.hpp"
-#include "util/logging.h"
 #include <algorithm>
 #include <chrono>
 #include <cstdlib>
@@ -14,6 +7,14 @@
 #include <iostream>
 #include <string>
 #include <thread>
+
+#include "Hasher.hpp"
+#include "TSDBEngineImpl.h"
+#include "common.h"
+#include "struct/ColumnValue.h"
+#include "struct/Vin.h"
+#include "test.hpp"
+#include "util/logging.h"
 
 /**
  * 把文件夹中的文件删除掉
@@ -32,7 +33,7 @@ static int types[] = {0, 0, 1, 0, 1, 0, 2, 1, 1, 0, 1, 0, 1, 0, 1, 0, 2, 1, 1, 0
 /**
  * 创建一个60个列的表
  */
-static int createTable(LindormContest::TSDBEngine *engine) {
+static int createTable(LindormContest::TSDBEngine* engine) {
   LindormContest::Schema schema;
   for (int i = 0; i < LindormContest::kColumnNum; i++) {
     std::string col_name = "c" + std::to_string(i);
@@ -58,14 +59,13 @@ static constexpr int kVinNum = 30000;
 static constexpr int kRowsPerVin = 10;
 static LindormContest::Row rows[kVinNum][kRowsPerVin];
 
-static bool RowEquals(const LindormContest::Row &a, const LindormContest::Row &b) {
-  if (a != b)
-    return false;
+static bool RowEquals(const LindormContest::Row& a, const LindormContest::Row& b) {
+  if (a != b) return false;
   auto a_cols = a.columns;
   auto b_cols = b.columns;
   LOG_ASSERT(a_cols.size() == b_cols.size(), "a_cols.size %zu, b_cols.size %zu", a_cols.size(), b_cols.size());
-  for (auto &col : a_cols) {
-    auto &name = col.first;
+  for (auto& col : a_cols) {
+    auto& name = col.first;
     auto a_col_val = col.second;
     auto iter = b_cols.find(name);
     LOG_ASSERT(iter != b_cols.cend(), "b_cols 没有 col %s", name.c_str());
@@ -73,11 +73,11 @@ static bool RowEquals(const LindormContest::Row &a, const LindormContest::Row &b
     LOG_ASSERT(a_col_val.getColumnType() == b_col_val.getColumnType(), "column type !=");
     switch (a_col_val.getColumnType()) {
       case LindormContest::COLUMN_TYPE_STRING: {
-        std::pair<int32_t, const char *> a_pair;
+        std::pair<int32_t, const char*> a_pair;
         a_col_val.getStringValue(a_pair);
         std::string a_str(a_pair.second, a_pair.first);
 
-        std::pair<int32_t, const char *> b_pair;
+        std::pair<int32_t, const char*> b_pair;
         b_col_val.getStringValue(b_pair);
         std::string b_str(b_pair.second, b_pair.first);
 
@@ -101,21 +101,28 @@ static bool RowEquals(const LindormContest::Row &a, const LindormContest::Row &b
         b_col_val.getDoubleFloatValue(b_val);
         LOG_ASSERT(a_val == b_val, "a_val %f b_val %f", a_val, b_val);
       } break;
-      case LindormContest::COLUMN_TYPE_UNINITIALIZED: break;
+      case LindormContest::COLUMN_TYPE_UNINITIALIZED:
+        break;
     }
   }
 
   return true;
 }
 
-char *randstr(char *str, const int len) {
+char* randstr(char* str, const int len) {
   srand(time(NULL));
   int i;
   for (i = 0; i < len; ++i) {
     switch ((rand() % 3)) {
-      case 1: str[i] = 'A' + rand() % 26; break;
-      case 2: str[i] = 'a' + rand() % 26; break;
-      default: str[i] = '0' + rand() % 10; break;
+      case 1:
+        str[i] = 'A' + rand() % 26;
+        break;
+      case 2:
+        str[i] = 'a' + rand() % 26;
+        break;
+      default:
+        str[i] = '0' + rand() % 10;
+        break;
     }
   }
   str[++i] = '\0';
@@ -135,7 +142,7 @@ void prepare_data() {
 
   for (int i = 0; i < kVinNum; i++) {
     for (int j = 0; j < kRowsPerVin; j++) {
-      auto &row = rows[i][j];
+      auto& row = rows[i][j];
       std::string vin = std::to_string(i);
       memcpy(row.vin.vin, vin.c_str(), vin.size());
       row.timestamp = j;
@@ -168,7 +175,7 @@ void prepare_data() {
   LOG_INFO("prepare data finished!");
 }
 
-void parallel_upsert(LindormContest::TSDBEngine *engine) {
+void parallel_upsert(LindormContest::TSDBEngine* engine) {
   LOG_INFO("start parallel upsert...");
 
   std::vector<std::thread> threads;
@@ -200,14 +207,14 @@ void parallel_upsert(LindormContest::TSDBEngine *engine) {
     });
   }
 
-  for (auto &th : threads) {
+  for (auto& th : threads) {
     th.join();
   }
 
   LOG_INFO("parallel upsert end");
 }
 
-void parallel_test_latest(LindormContest::TSDBEngine *engine) {
+void parallel_test_latest(LindormContest::TSDBEngine* engine) {
   LOG_INFO("start parallel test latest...");
   // validate executeLatestQuery
   std::vector<std::thread> threads;
@@ -235,14 +242,14 @@ void parallel_test_latest(LindormContest::TSDBEngine *engine) {
     });
   }
 
-  for (auto &th : threads) {
+  for (auto& th : threads) {
     th.join();
   }
 
   LOG_INFO("parallel test latest PASS");
 }
 
-void test_time_range(LindormContest::TSDBEngine *engine) {
+void test_time_range(LindormContest::TSDBEngine* engine) {
   LOG_INFO("start test time range...");
   // validate time range
   for (int i = 0; i < kVinNum; i++) {
@@ -260,14 +267,14 @@ void test_time_range(LindormContest::TSDBEngine *engine) {
     std::vector<LindormContest::Row> trReadRes;
     int ret = engine->executeTimeRangeQuery(trR, trReadRes);
     LOG_ASSERT(trReadRes.size() == kRowsPerVin, "size = %zu", trReadRes.size());
-    for (auto &row : trReadRes) {
+    for (auto& row : trReadRes) {
       LOG_ASSERT(RowEquals(row, rows[i][row.timestamp]), "not equal");
     }
   }
   LOG_INFO("test time range PASS");
 }
 
-void parallel_test_time_range(LindormContest::TSDBEngine *engine) {
+void parallel_test_time_range(LindormContest::TSDBEngine* engine) {
   LOG_INFO("start parallel test time range...");
   // validate time range
   std::vector<std::thread> threads;
@@ -291,14 +298,14 @@ void parallel_test_time_range(LindormContest::TSDBEngine *engine) {
         std::vector<LindormContest::Row> trReadRes;
         int ret = engine->executeTimeRangeQuery(trR, trReadRes);
         LOG_ASSERT(trReadRes.size() == kRowsPerVin, "size = %zu", trReadRes.size());
-        for (auto &row : trReadRes) {
+        for (auto& row : trReadRes) {
           LOG_ASSERT(RowEquals(row, rows[i][row.timestamp]), "not equal");
         }
       }
     });
   }
 
-  for (auto &th : threads) {
+  for (auto& th : threads) {
     th.join();
   }
 
@@ -308,7 +315,7 @@ void parallel_test_time_range(LindormContest::TSDBEngine *engine) {
 int main() {
   std::string dataPath = "/tmp/tsdb_test";
   clearTempFolder(dataPath);
-  LindormContest::TSDBEngine *engine = new LindormContest::TSDBEngineImpl(dataPath);
+  LindormContest::TSDBEngine* engine = new LindormContest::TSDBEngineImpl(dataPath);
 
   // connect
   int ret = engine->connect();
@@ -339,7 +346,6 @@ int main() {
   parallel_test_time_range(engine);
 
   engine->shutdown();
-
 
   LOG_INFO("PASS!!!");
 }

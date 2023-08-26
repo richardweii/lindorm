@@ -15,7 +15,7 @@ struct Interval {
   BlockMeta* meta;
 
   // Define comparison operator
-  bool operator<(const Interval &other) const {
+  bool operator<(const Interval& other) const {
     return start < other.start || (start == other.start && end < other.end);
   }
 };
@@ -24,28 +24,28 @@ struct Node {
   Interval range;
   int64_t max_end;
   int height;
-  Node *left;
-  Node *right;
-  Node(const Interval &interval) : range(interval), max_end(interval.end), height(1), left(nullptr), right(nullptr) {}
+  Node* left;
+  Node* right;
+  Node(const Interval& interval) : range(interval), max_end(interval.end), height(1), left(nullptr), right(nullptr) {}
 };
 
 class IntervalTree {
 private:
-  Node *root;
+  Node* root;
 
-  int getHeight(Node *node) { return (node) ? node->height : 0; }
+  int getHeight(Node* node) { return (node) ? node->height : 0; }
 
-  int getBalance(Node *node) { return (node) ? getHeight(node->left) - getHeight(node->right) : 0; }
+  int getBalance(Node* node) { return (node) ? getHeight(node->left) - getHeight(node->right) : 0; }
 
-  void updateMaxEnd(Node *node) {
+  void updateMaxEnd(Node* node) {
     if (node) {
       node->max_end = std::max(node->range.end, std::max(getMaxEnd(node->left), getMaxEnd(node->right)));
     }
   }
 
-  Node *rotateRight(Node *y) {
-    Node *x = y->left;
-    Node *T2 = x->right;
+  Node* rotateRight(Node* y) {
+    Node* x = y->left;
+    Node* T2 = x->right;
 
     x->right = y;
     y->left = T2;
@@ -59,9 +59,9 @@ private:
     return x;
   }
 
-  Node *rotateLeft(Node *x) {
-    Node *y = x->right;
-    Node *T2 = y->left;
+  Node* rotateLeft(Node* x) {
+    Node* y = x->right;
+    Node* T2 = y->left;
 
     y->left = x;
     x->right = T2;
@@ -75,7 +75,7 @@ private:
     return y;
   }
 
-  Node *balance(Node *node, const Interval &interval) {
+  Node* balance(Node* node, const Interval& interval) {
     int balanceFactor = getBalance(node);
 
     if (balanceFactor > 1 && interval.start < node->left->range.start) {
@@ -99,7 +99,7 @@ private:
     return node;
   }
 
-  Node *insertNode(Node *node, const Interval &interval) {
+  Node* insertNode(Node* node, const Interval& interval) {
     if (!node) {
       return new Node(interval);
     }
@@ -116,9 +116,9 @@ private:
     return balance(node, interval);
   }
 
-  int64_t getMaxEnd(Node *node) { return (node) ? node->max_end : 0; }
+  int64_t getMaxEnd(Node* node) { return (node) ? node->max_end : 0; }
 
-  void searchOverlap(Node *node, const Interval &query, std::set<Interval> &result) {
+  void searchOverlap(Node* node, const Interval& query, std::set<Interval>& result) {
     if (!node) {
       return;
     }
@@ -139,14 +139,13 @@ private:
 public:
   IntervalTree() : root(nullptr) {}
 
-  void insert(const Interval &interval) { root = insertNode(root, interval); }
+  void insert(const Interval& interval) { root = insertNode(root, interval); }
 
-  std::set<Interval> searchOverlap(const Interval &query) {
+  std::set<Interval> searchOverlap(const Interval& query) {
     std::set<Interval> result;
     searchOverlap(root, query, result);
     return result;
   }
-
 };
 
 } // namespace LindormContest

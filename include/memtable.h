@@ -1,5 +1,7 @@
 #pragma once
 
+#include <cstdint>
+
 #include "InternalColumnArr.h"
 #include "ShardBlockMetaManager.h"
 #include "TSDBEngine.hpp"
@@ -15,18 +17,13 @@
 #include "util/interval_tree.h"
 #include "util/logging.h"
 #include "util/rwlock.h"
-#include <cstdint>
 
 namespace LindormContest {
 
 class MemTable {
 public:
-  MemTable(int shard_id, TSDBEngineImpl *engine)
-      : engine(engine),
-        shard_id_(shard_id),
-        columnsNum_(kColumnNum),
-        cnt_(0),
-        file_manager_(engine->file_manager_) {
+  MemTable(int shard_id, TSDBEngineImpl* engine)
+      : engine(engine), shard_id_(shard_id), columnsNum_(kColumnNum), cnt_(0), file_manager_(engine->file_manager_) {
     block_manager_ = new ShardBlockMetaManager(columnsNum_ + kExtraColNum);
     for (int i = 0; i < kVinNumPerShard; i++) {
       interval_trees[i] = nullptr;
@@ -53,9 +50,9 @@ public:
   /**
    * 写入一行数据到memtable，会将其所有列分别加到对应列的数组当中
    */
-  void Add(const Row &row, uint16_t vid);
+  void Add(const Row& row, uint16_t vid);
 
-  const Row &GetLatestRow(uint16_t vid) {
+  const Row& GetLatestRow(uint16_t vid) {
     int idx = vid2idx(vid);
 
     return latest_row_cache[idx];
@@ -63,7 +60,8 @@ public:
 
   void Flush();
 
-  void GetRowsFromTimeRange(uint64_t vid, int64_t lowerInclusive, int64_t upperExclusive, const std::set<std::string> &requestedColumns, std::vector<Row> &results);
+  void GetRowsFromTimeRange(uint64_t vid, int64_t lowerInclusive, int64_t upperExclusive,
+                            const std::set<std::string>& requestedColumns, std::vector<Row>& results);
 
   // 清空状态
   void Reset() {
@@ -81,18 +79,18 @@ public:
     ts_col->Reset();
   }
 
-  void SaveBlockMeta(File *file) { block_manager_->Save(file, shard_id_); }
+  void SaveBlockMeta(File* file) { block_manager_->Save(file, shard_id_); }
 
-  void LoadBlockMeta(File *file) {
+  void LoadBlockMeta(File* file) {
     for (int i = 0; i < kVinNumPerShard; i++) {
       interval_trees[i] = new IntervalTree();
     }
     block_manager_->Load(file, shard_id_, interval_trees);
   }
 
-  void SaveLatestRowCache(File *file);
+  void SaveLatestRowCache(File* file);
 
-  void LoadLatestRowCache(File *file);
+  void LoadLatestRowCache(File* file);
 
 private:
   friend class ShardBlockMetaManager;
@@ -113,21 +111,21 @@ private:
 
   void sort();
 
-  TSDBEngineImpl *engine;
+  TSDBEngineImpl* engine;
   int shard_id_;
 
   int columnsNum_; // How many columns is defined in schema for the sole table.
   // std::string *engine->columnsName; // The column's name for each column.
-  ColumnArrWrapper **columnArrs_;
-  VidArrWrapper *vid_col;
-  TsArrWrapper *ts_col;
-  IdxArrWrapper *idx_col;
+  ColumnArrWrapper** columnArrs_;
+  VidArrWrapper* vid_col;
+  TsArrWrapper* ts_col;
+  IdxArrWrapper* idx_col;
 
   int cnt_; // 记录这个memtable写了多少行了，由于可能没有写满，然后shutdown刷下去了，所以需要记录一下
   int64_t min_ts_[kVinNumPerShard];
   int64_t max_ts_[kVinNumPerShard];
-  FileManager *file_manager_;
-  ShardBlockMetaManager *block_manager_;
+  FileManager* file_manager_;
+  ShardBlockMetaManager* block_manager_;
 
   // LatestQueryCache
   Row latest_row_cache[kVinNumPerShard];
@@ -138,7 +136,7 @@ private:
   int64_t mem_latest_row_ts[kVinNumPerShard];
 
   // 区间查询树，用于加速time range的查找
-  IntervalTree *interval_trees[kVinNumPerShard];
+  IntervalTree* interval_trees[kVinNumPerShard];
 };
 
 /**
@@ -146,7 +144,7 @@ private:
  */
 class ShardMemtable {
 public:
-  ShardMemtable(TSDBEngineImpl *engine) {
+  ShardMemtable(TSDBEngineImpl* engine) {
     for (int i = 0; i < kShardNum; i++) {
       memtables[i] = new MemTable(i, engine);
     }
@@ -160,7 +158,7 @@ public:
     LOG_INFO("Init ShardMemtable finished");
   }
 
-  void Add(const Row &row, uint16_t vid) {
+  void Add(const Row& row, uint16_t vid) {
     int shard_id = Shard(vid);
 
     rwlcks[shard_id].wlock();
@@ -169,7 +167,7 @@ public:
     memtables[shard_id]->Add(row, vid);
   }
 
-  const Row &GetLatestRow(uint16_t vid) {
+  const Row& GetLatestRow(uint16_t vid) {
     int shard_id = Shard(vid);
 
     rwlcks[shard_id].rlock();
@@ -178,7 +176,8 @@ public:
     return memtables[shard_id]->GetLatestRow(vid);
   }
 
-  void GetRowsFromTimeRange(uint64_t vid, int64_t lowerInclusive, int64_t upperExclusive, const std::set<std::string> &requestedColumns, std::vector<Row> &results) {
+  void GetRowsFromTimeRange(uint64_t vid, int64_t lowerInclusive, int64_t upperExclusive,
+                            const std::set<std::string>& requestedColumns, std::vector<Row>& results) {
     int shard_id = Shard(vid);
 
     rwlcks[shard_id].rlock();
@@ -189,16 +188,16 @@ public:
 
   void Flush(int shard_id) { memtables[shard_id]->Flush(); }
 
-  void SaveBlockMeta(int shard_id, File *file) { memtables[shard_id]->SaveBlockMeta(file); }
+  void SaveBlockMeta(int shard_id, File* file) { memtables[shard_id]->SaveBlockMeta(file); }
 
-  void LoadBlockMeta(int shard_id, File *file) { memtables[shard_id]->LoadBlockMeta(file); }
+  void LoadBlockMeta(int shard_id, File* file) { memtables[shard_id]->LoadBlockMeta(file); }
 
-  void SaveLatestRowCache(int shard_id, File *file) { memtables[shard_id]->SaveLatestRowCache(file); }
+  void SaveLatestRowCache(int shard_id, File* file) { memtables[shard_id]->SaveLatestRowCache(file); }
 
-  void LoadLatestRowCache(int shard_id, File *file) { memtables[shard_id]->LoadLatestRowCache(file); }
+  void LoadLatestRowCache(int shard_id, File* file) { memtables[shard_id]->LoadLatestRowCache(file); }
 
 private:
-  MemTable *memtables[kShardNum];
+  MemTable* memtables[kShardNum];
   RWLock rwlcks[kShardNum];
 };
 

@@ -6,15 +6,7 @@
 //
 
 #include "TSDBEngineImpl.h"
-#include "common.h"
-#include "filename.h"
-#include "io/file.h"
-#include "io/file_manager.h"
-#include "memtable.h"
-#include "struct/Vin.h"
-#include "util/likely.h"
-#include "util/logging.h"
-#include "util/stat.h"
+
 #include <atomic>
 #include <cstdint>
 #include <cstdio>
@@ -25,6 +17,16 @@
 #include <sstream>
 #include <utility>
 
+#include "common.h"
+#include "filename.h"
+#include "io/file.h"
+#include "io/file_manager.h"
+#include "memtable.h"
+#include "struct/Vin.h"
+#include "util/likely.h"
+#include "util/logging.h"
+#include "util/stat.h"
+
 namespace LindormContest {
 
 std::string kTableName = "only_one"; // 目前就一张表，表名预留给复赛
@@ -34,7 +36,7 @@ std::string kTableName = "only_one"; // 目前就一张表，表名预留给复�
  * Our evaluation program will call this constructor.
  * The function's body can be modified.
  */
-TSDBEngineImpl::TSDBEngineImpl(const std::string &dataDirPath) : TSDBEngine(dataDirPath) {
+TSDBEngineImpl::TSDBEngineImpl(const std::string& dataDirPath) : TSDBEngine(dataDirPath) {
   file_manager_ = new FileManager();
   shard_memtable_ = new ShardMemtable(this);
 }
@@ -65,7 +67,7 @@ void TSDBEngineImpl::LoadSchema() {
     schemaFin >> columnsName[i];
     int32_t columnTypeInt;
     schemaFin >> columnTypeInt;
-    columnsType[i] = (ColumnType) columnTypeInt;
+    columnsType[i] = (ColumnType)columnTypeInt;
 
     col2colid.emplace(columnsName[i], i);
   }
@@ -84,12 +86,12 @@ int TSDBEngineImpl::connect() {
       LOG_INFO("start load vin2vid");
       SequentialReadFile file(filename);
       int num;
-      file.read((char *) &num, sizeof(num));
+      file.read((char*)&num, sizeof(num));
       for (int i = 0; i < num; i++) {
         char vin[VIN_LENGTH] = {0};
         uint16_t vid;
         file.read(vin, VIN_LENGTH);
-        file.read((char *) &vid, sizeof(vid));
+        file.read((char*)&vid, sizeof(vid));
         std::string vin_str(vin, VIN_LENGTH);
         vin2vid.emplace(std::make_pair(vin_str, vid));
         vid2vin.emplace(std::make_pair(vid, vin_str));
@@ -131,9 +133,9 @@ int TSDBEngineImpl::connect() {
   return 0;
 }
 
-int TSDBEngineImpl::createTable(const std::string &tableName, const Schema &schema) {
+int TSDBEngineImpl::createTable(const std::string& tableName, const Schema& schema) {
   LOG_INFO("start create table %s", tableName.c_str());
-  columnsNum = (int32_t) schema.columnTypeMap.size();
+  columnsNum = (int32_t)schema.columnTypeMap.size();
   columnsName = new std::string[columnsNum];
   columnsType = new ColumnType[columnsNum];
   int i = 0;
@@ -161,7 +163,7 @@ void TSDBEngineImpl::SaveSchema() {
     schemaFout << " ";
     for (int i = 0; i < columnsNum; ++i) {
       schemaFout << columnsName[i] << " ";
-      schemaFout << (int32_t) columnsType[i] << " ";
+      schemaFout << (int32_t)columnsType[i] << " ";
     }
     schemaFout.close();
   }
@@ -186,14 +188,14 @@ int TSDBEngineImpl::shutdown() {
   // save block meta
   for (int i = 0; i < kShardNum; i++) {
     std::string filename = ShardMetaFileName(dataDirPath, kTableName, i);
-    File *file = file_manager_->Open(filename);
+    File* file = file_manager_->Open(filename);
     shard_memtable_->SaveBlockMeta(i, file);
   }
 
   // save latest row cache
   for (int i = 0; i < kShardNum; i++) {
     std::string filename = LatestRowFileName(dataDirPath, kTableName, i);
-    File *file = file_manager_->Open(filename);
+    File* file = file_manager_->Open(filename);
     shard_memtable_->SaveLatestRowCache(i, file);
   }
 
@@ -201,13 +203,13 @@ int TSDBEngineImpl::shutdown() {
   {
     vin2vid_lck.wlock();
     std::string filename = Vin2vidFileName(dataDirPath, kTableName);
-    File *file = file_manager_->Open(filename);
+    File* file = file_manager_->Open(filename);
     int num = vin2vid.size();
-    file->write((char *) &num, sizeof(num));
-    for (auto &pair : vin2vid) {
+    file->write((char*)&num, sizeof(num));
+    for (auto& pair : vin2vid) {
       LOG_ASSERT(pair.first.size() == VIN_LENGTH, "size = %zu", pair.first.size());
       file->write(pair.first.c_str(), VIN_LENGTH);
-      file->write((char *) &pair.second, sizeof(pair.second));
+      file->write((char*)&pair.second, sizeof(pair.second));
     }
     vin2vid_lck.unlock();
   }
@@ -229,11 +231,11 @@ int TSDBEngineImpl::shutdown() {
 // int cnt[kVinNum] = {0};
 // std::mutex mutex;
 
-int TSDBEngineImpl::upsert(const WriteRequest &writeRequest) {
+int TSDBEngineImpl::upsert(const WriteRequest& writeRequest) {
   // static std::atomic<int> upsert_cnt = 0;
   RECORD_FETCH_ADD(write_cnt, writeRequest.rows.size());
 
-  for (auto &row : writeRequest.rows) {
+  for (auto& row : writeRequest.rows) {
     uint16_t vid = write_get_vid(row.vin);
     // if (vid == 0 && upsert_cnt++ < 100) {
     //   print_row(row, vid);
@@ -265,22 +267,22 @@ int TSDBEngineImpl::upsert(const WriteRequest &writeRequest) {
   return 0;
 }
 
-int TSDBEngineImpl::executeLatestQuery(const LatestQueryRequest &pReadReq, std::vector<Row> &pReadRes) {
+int TSDBEngineImpl::executeLatestQuery(const LatestQueryRequest& pReadReq, std::vector<Row>& pReadRes) {
   RECORD_FETCH_ADD(latest_query_cnt, pReadReq.vins.size());
-  for (const auto &vin : pReadReq.vins) {
+  for (const auto& vin : pReadReq.vins) {
     uint16_t vid = read_get_vid(vin);
     if (vid == UINT16_MAX) {
       continue;
     }
 
-    const Row &row = shard_memtable_->GetLatestRow(vid);
+    const Row& row = shard_memtable_->GetLatestRow(vid);
     Row res;
     res.vin = vin;
     res.timestamp = row.timestamp;
-    for (const auto &requestedColumn : pReadReq.requestedColumns) {
+    for (const auto& requestedColumn : pReadReq.requestedColumns) {
       auto pair = row.columns.find(requestedColumn);
       LOG_ASSERT(pair != row.columns.end(), "error");
-      const auto &col = pair->second;
+      const auto& col = pair->second;
       res.columns.insert(std::make_pair(requestedColumn, col));
     }
 
@@ -290,14 +292,15 @@ int TSDBEngineImpl::executeLatestQuery(const LatestQueryRequest &pReadReq, std::
   return 0;
 }
 
-int TSDBEngineImpl::executeTimeRangeQuery(const TimeRangeQueryRequest &trReadReq, std::vector<Row> &trReadRes) {
+int TSDBEngineImpl::executeTimeRangeQuery(const TimeRangeQueryRequest& trReadReq, std::vector<Row>& trReadRes) {
   RECORD_FETCH_ADD(time_range_query_cnt, 1);
   uint16_t vid = read_get_vid(trReadReq.vin);
   if (vid == UINT16_MAX) {
     return 0;
   }
 
-  shard_memtable_->GetRowsFromTimeRange(vid, trReadReq.timeLowerBound, trReadReq.timeUpperBound, trReadReq.requestedColumns, trReadRes);
+  shard_memtable_->GetRowsFromTimeRange(vid, trReadReq.timeLowerBound, trReadReq.timeUpperBound,
+                                        trReadReq.requestedColumns, trReadRes);
 
   return 0;
 }

@@ -56,7 +56,9 @@ inline int binarySearch(int64_t arr[], int low, int high, int64_t target) {
   return high; // Return the index of the last element less than the target
 }
 
-inline void findMatchingIndices(uint16_t vid[], int64_t ts[], uint16_t idx[], int size, int target_vid, int64_t ts_lower, int64_t ts_upper, std::vector<uint16_t> &idxs, std::vector<int64_t>& tss) {
+inline void findMatchingIndices(uint16_t vid[], int64_t ts[], uint16_t idx[], int size, int target_vid,
+                                int64_t ts_lower, int64_t ts_upper, std::vector<uint16_t>& idxs,
+                                std::vector<int64_t>& tss) {
   int low = 0;
   int high = size - 1;
   int vid_index = size;
