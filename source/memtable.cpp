@@ -1,10 +1,12 @@
 #include "memtable.h"
+#include "InternalColumnArr.h"
 #include "common.h"
 #include "io/file.h"
 #include "struct/ColumnValue.h"
 #include "struct/Vin.h"
 #include "util/logging.h"
 #include "util/stat.h"
+#include "util/util.h"
 #include <atomic>
 #include <cstddef>
 #include <cstdint>
@@ -26,6 +28,8 @@ void MemTable::Init() {
   vid_col = new VidArrWrapper(columnsNum_);
   // ts col
   ts_col = new TsArrWrapper(columnsNum_ + 1);
+  // idx col
+  idx_col = new IdxArrWrapper(columnsNum_ + 2);
 
   for (int i = 0; i < kVinNumPerShard; i++) {
     min_ts_[i] = INT64_MAX;
@@ -61,12 +65,25 @@ void MemTable::Add(const Row &row, uint16_t vid) {
   ColumnValue tsVal(row.timestamp * 1.0);
   ts_col->Add(tsVal, cnt_);
 
+  // 写入idx列
+  ColumnValue idxVal(cnt_);
+  idx_col->Add(idxVal, cnt_);
+
   updateTs(row.timestamp, vid);
 
   cnt_++;
   if (cnt_ >= kMemtableRowNum) {
     Flush();
   }
+}
+
+void MemTable::sort() {
+  // 先对 vid + ts idx这三列进行排序
+  uint16_t *vid_datas = vid_col->GetDataArr();
+  int64_t *ts_datas = ts_col->GetDataArr();
+  uint16_t *idx_datas = idx_col->GetDataArr();
+
+  quickSort(vid_datas, ts_datas, idx_datas, 0, cnt_ - 1);
 }
 
 void MemTable::Flush() {
@@ -94,6 +111,9 @@ void MemTable::Flush() {
     columnArrs_[i]->Flush(file, cnt_, meta);
   }
 
+  // 先对 vid + ts idx这三列进行排序
+  sort();
+
   {
     std::string file_name = ColFileName(engine->dataDirPath, engine->table_name_, shard_id_, kVidColName);
     File *file = file_manager_->Open(file_name);
@@ -104,6 +124,12 @@ void MemTable::Flush() {
     std::string file_name = ColFileName(engine->dataDirPath, engine->table_name_, shard_id_, kTsColName);
     File *file = file_manager_->Open(file_name);
     ts_col->Flush(file, cnt_, meta);
+  }
+
+  {
+    std::string file_name = ColFileName(engine->dataDirPath, engine->table_name_, shard_id_, kIdxColName);
+    File *file = file_manager_->Open(file_name);
+    idx_col->Flush(file, cnt_, meta);
   }
 
   Reset();
@@ -142,7 +168,7 @@ void MemTable::GetRowsFromTimeRange(uint64_t vid, int64_t lowerInclusive, int64_
   if (interval_trees[idx] != nullptr) {
     Interval query = {lowerInclusive, upperExclusive};
     std::set<Interval> overlappingIntervals = interval_trees[idx]->searchOverlap(query);
-    for (auto& interval : overlappingIntervals) {
+    for (auto &interval : overlappingIntervals) {
       blk_metas.emplace_back(interval.meta);
     }
   } else {
@@ -155,6 +181,8 @@ void MemTable::GetRowsFromTimeRange(uint64_t vid, int64_t lowerInclusive, int64_
       ColumnArrWrapper *cols[requestedColumns.size()];
       VidArrWrapper *tmp_vid_col = new VidArrWrapper(columnsNum_);
       TsArrWrapper *tmp_ts_col = new TsArrWrapper(columnsNum_ + 1);
+      IdxArrWrapper *tmp_idx_col = new IdxArrWrapper(columnsNum_ + 2);
+
       int icol_idx = 0;
       for (const auto &requestedColumn : requestedColumns) {
         auto idx = engine->col2colid[requestedColumn];
@@ -181,21 +209,32 @@ void MemTable::GetRowsFromTimeRange(uint64_t vid, int64_t lowerInclusive, int64_
         tmp_ts_col->Read(&file, blk_meta);
       }
 
-      std::vector<int> idxs;
-      for (int i = 0; i < blk_meta->num; i++) {
-        if (tmp_vid_col->GetVal(i) == (int64_t) vid && inRange(tmp_ts_col->GetVal(i), lowerInclusive, upperExclusive)) {
-          idxs.emplace_back(i);
-        }
+      {
+        std::string file_name = ColFileName(engine->dataDirPath, engine->table_name_, shard_id_, kIdxColName);
+        RandomAccessFile file(file_name);
+        tmp_idx_col->Read(&file, blk_meta);
       }
+
+      // 现在vid + ts是有序的，可以直接应用二分查找
+      std::vector<uint16_t> idxs;
+      std::vector<int64_t> tss;
+      findMatchingIndices(tmp_vid_col->GetDataArr(), tmp_ts_col->GetDataArr(), tmp_idx_col->GetDataArr(), blk_meta->num, vid, lowerInclusive, upperExclusive, idxs, tss);
+
+      // for (int i = 0; i < blk_meta->num; i++) {
+      //   if (tmp_vid_col->GetVal(i) == (int64_t) vid && inRange(tmp_ts_col->GetVal(i), lowerInclusive, upperExclusive)) {
+      //     idxs.emplace_back(i);
+      //   }
+      // }
+
       if (!idxs.empty()) {
-        for (auto idx : idxs) {
+        for (int i = 0; i < idxs.size(); i++) {
           // build res row
           Row resultRow;
-          resultRow.timestamp = tmp_ts_col->GetVal(idx);
+          resultRow.timestamp = tss[i];
           memcpy(resultRow.vin.vin, engine->vid2vin[vid].c_str(), VIN_LENGTH);
           for (size_t k = 0; k < requestedColumns.size(); k++) {
             ColumnValue col;
-            cols[k]->Get(idx, col);
+            cols[k]->Get(idxs[i], col);
             resultRow.columns.insert(std::make_pair(engine->columnsName[cols[k]->GetColid()], std::move(col)));
           }
           results.push_back(std::move(resultRow));
@@ -205,8 +244,10 @@ void MemTable::GetRowsFromTimeRange(uint64_t vid, int64_t lowerInclusive, int64_
       for (size_t k = 0; k < requestedColumns.size(); k++) {
         delete cols[k];
       }
+
       delete tmp_vid_col;
       delete tmp_ts_col;
+      delete tmp_idx_col;
     }
   }
 }

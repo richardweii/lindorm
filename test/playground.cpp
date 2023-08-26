@@ -18,6 +18,7 @@
 #include <iostream>
 #include <string>
 
+#include "util/util.h"
 #include <fcntl.h>
 #include <malloc.h>
 #include <stdio.h>
@@ -83,7 +84,60 @@ void play_zstd() {
   LOG_INFO("origin_sz %d compress_sz %d, compress_ratio = %f", origin_sz, compress_sz, (compress_sz * 1.0) / (origin_sz * 1.0));
 }
 
+const size_t ARRAY_SIZE = 5; // Size of the arrays
+
+void play_quick_sort() {
+  uint16_t vid[ARRAY_SIZE] = {2, 1, 3, 1, 2};
+  int64_t ts[ARRAY_SIZE] = {5, 4, 3, 6, 2};
+  uint16_t idx[ARRAY_SIZE] = {3, 1, 4, 2, 5};
+
+  LindormContest::quickSort(vid, ts, idx, 0, ARRAY_SIZE - 1);
+
+  std::cout << "Sorted vid:" << std::endl;
+  for (int v : vid) {
+    std::cout << v << " ";
+  }
+  std::cout << std::endl;
+
+  std::cout << "Sorted ts:" << std::endl;
+  for (int t : ts) {
+    std::cout << t << " ";
+  }
+  std::cout << std::endl;
+
+  std::cout << "Sorted idx:" << std::endl;
+  for (int i : idx) {
+    std::cout << i << " ";
+  }
+  std::cout << std::endl;
+}
+
+void play_binary_serch() {
+  uint16_t vid[] = {1, 1, 1, 2, 2, 2, 2, 2, 3};
+  int64_t ts[] = {2, 4, 6, 1, 2, 3, 4,  5, 3};
+  uint16_t idx[] = {0, 1, 2, 4, 3, 5, 6, 7, 8};
+  int size = sizeof(vid) / sizeof(vid[0]);
+
+  int target_vid = 2;
+  int ts_lower = 2;
+  int ts_upper = 5;
+
+  std::vector<uint16_t> found_indices;
+  std::vector<int64_t> tss;
+  LindormContest::findMatchingIndices(vid, ts, idx, size, target_vid, ts_lower, ts_upper, found_indices, tss);
+
+  if (!found_indices.empty()) {
+    std::cout << "Found at indices: ";
+    for (size_t index : found_indices) {
+      std::cout << index << " ";
+    }
+    std::cout << std::endl;
+  } else {
+    std::cout << "Not found." << std::endl;
+  }
+}
+
 int main() {
-  play_zstd();
+  play_binary_serch();
   return 0;
 }

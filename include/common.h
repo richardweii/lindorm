@@ -13,18 +13,19 @@
 
 namespace LindormContest {
 
-constexpr uint32_t kBlockSize = 32 * KB;
 constexpr int kColumnNum = 60;
 constexpr int kVinNum = 30000;
-constexpr int kShardBits = 8;
+constexpr int kShardBits = 10;
 constexpr int kShardNum = 1 << kShardBits; // 按照vin进行分片的数量，最好保证和kVinNum是整除的关系，这样每个分片的vin数量是均匀的
 constexpr int kVinNumPerShard = (kVinNum / kShardNum) + 1; // 打到每个memtable里面vin的个数
-constexpr int kMemtableRowNum = 10000;                // 一个memtable里面最多存储多少行数据
-constexpr int kExtraColNum = 2;
+constexpr int kMemtableRowNum = 4096;                // 一个memtable里面最多存储多少行数据
+constexpr int kExtraColNum = 3;
 const std::string kVidColName = "myvid";
 const std::string kTsColName = "myts";
+const std::string kIdxColName = "myidx";
 
-// 底四位决定shard
+
+// 低位决定shard
 inline int Shard(uint16_t vid) {
   LOG_ASSERT(vid < kVinNum, "vid = %d", vid);
   return vid % kShardNum;

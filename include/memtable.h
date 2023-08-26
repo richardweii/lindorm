@@ -111,6 +111,8 @@ private:
     return ts >= lowerInclusive && ts < upperExclusive;
   }
 
+  void sort();
+
   TSDBEngineImpl *engine;
   int shard_id_;
 
@@ -119,6 +121,7 @@ private:
   ColumnArrWrapper **columnArrs_;
   VidArrWrapper *vid_col;
   TsArrWrapper *ts_col;
+  IdxArrWrapper *idx_col;
 
   int cnt_; // 记录这个memtable写了多少行了，由于可能没有写满，然后shutdown刷下去了，所以需要记录一下
   int64_t min_ts_[kVinNumPerShard];

@@ -100,7 +100,6 @@ public:
 
   const int col_id;
 
-private:
   T datas[kMemtableRowNum];
   ColumnType type;
 };
@@ -305,6 +304,8 @@ public:
 
   int GetColid() override { return arr->col_id; }
 
+  uint16_t *GetDataArr() { return arr->datas; }
+
 private:
   ColumnArr<uint16_t> *arr;
 };
@@ -329,8 +330,36 @@ public:
 
   int GetColid() override { return arr->col_id; }
 
+  int64_t *GetDataArr() { return arr->datas; }
+
 private:
   ColumnArr<int64_t> *arr;
+};
+
+class IdxArrWrapper : public ColumnArrWrapper {
+public:
+  IdxArrWrapper(int col_id) { arr = new ColumnArr<uint16_t>(col_id, COLUMN_TYPE_INTEGER); }
+
+  ~IdxArrWrapper() { delete arr; }
+
+  void Add(const ColumnValue &col, int idx) override { arr->Add(col, idx); }
+
+  void Flush(File *file, int cnt, BlockMeta *meta) override { arr->Flush(file, cnt, meta); }
+
+  void Read(File *file, BlockMeta *meta) override { arr->Read(file, meta); }
+
+  void Get(int idx, ColumnValue &value) override { arr->Get(idx, value); }
+
+  int64_t GetVal(int idx) override { return arr->GetVal(idx); }
+
+  void Reset() override { arr->Reset(); }
+
+  int GetColid() override { return arr->col_id; }
+
+  uint16_t *GetDataArr() { return arr->datas; }
+
+private:
+  ColumnArr<uint16_t> *arr;
 };
 
 } // namespace LindormContest
