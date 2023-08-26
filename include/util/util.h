@@ -92,7 +92,9 @@ inline void findMatchingIndices(uint16_t vid[], int64_t ts[], uint16_t idx[], in
 
     // Binary search within the range of ts values
     int ts_start = binarySearch(ts, start_idx, end_idx, ts_lower);
+    if (ts_start < start_idx) ts_start = start_idx;
     int ts_end = binarySearch(ts, start_idx, end_idx, ts_upper);
+    if (ts_end > end_idx) ts_end = end_idx;
 
     for (int i = ts_start; i <= ts_end; ++i) {
       if (ts[i] >= ts_lower && ts[i] < ts_upper) {

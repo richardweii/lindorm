@@ -269,24 +269,20 @@ int TSDBEngineImpl::upsert(const WriteRequest& writeRequest) {
 
 int TSDBEngineImpl::executeLatestQuery(const LatestQueryRequest& pReadReq, std::vector<Row>& pReadRes) {
   RECORD_FETCH_ADD(latest_query_cnt, pReadReq.vins.size());
+  std::vector<int> colids;
+  for (auto& col_name : pReadReq.requestedColumns) {
+    colids.emplace_back(col2colid[col_name]);
+  }
+
   for (const auto& vin : pReadReq.vins) {
     uint16_t vid = read_get_vid(vin);
     if (vid == UINT16_MAX) {
       continue;
     }
 
-    const Row& row = shard_memtable_->GetLatestRow(vid);
-    Row res;
-    res.vin = vin;
-    res.timestamp = row.timestamp;
-    for (const auto& requestedColumn : pReadReq.requestedColumns) {
-      auto pair = row.columns.find(requestedColumn);
-      LOG_ASSERT(pair != row.columns.end(), "error");
-      const auto& col = pair->second;
-      res.columns.insert(std::make_pair(requestedColumn, col));
-    }
-
-    pReadRes.push_back(std::move(res));
+    Row row;
+    shard_memtable_->GetLatestRow(vid, row, colids);
+    pReadRes.push_back(std::move(row));
   }
 
   return 0;

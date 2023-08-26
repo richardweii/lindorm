@@ -330,7 +330,7 @@ int main() {
   parallel_upsert(engine);
 
   parallel_test_latest(engine);
-  // parallel_test_time_range(engine);
+  parallel_test_time_range(engine);
 
   LOG_INFO("start shutdown...");
   engine->shutdown();

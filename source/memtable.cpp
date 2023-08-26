@@ -43,7 +43,6 @@ void MemTable::Init() {
   for (int i = 0; i < kVinNumPerShard; i++) {
     min_ts_[i] = INT64_MAX;
     max_ts_[i] = INT64_MIN;
-    latest_ts_cache[i] = -1;
     mem_latest_row_idx[i] = -1;
     mem_latest_row_ts[i] = -1;
   }
@@ -52,11 +51,9 @@ void MemTable::Init() {
 void MemTable::Add(const Row& row, uint16_t vid) {
   int idx = vid2idx(vid);
 
-  if (latest_ts_cache[idx] < row.timestamp) {
-    latest_ts_cache[idx] = row.timestamp;
-    latest_row_cache[idx] = row;
-    // mem_latest_row_ts[idx] = row.timestamp;
-    // mem_latest_row_idx[idx] = cnt_;
+  if (mem_latest_row_ts[idx] < row.timestamp && latest_ts_cache[idx] < row.timestamp) {
+    mem_latest_row_ts[idx] = row.timestamp;
+    mem_latest_row_idx[idx] = cnt_;
   }
 
   for (int i = 0; i < columnsNum_; i++) {
@@ -98,18 +95,17 @@ void MemTable::sort() {
 void MemTable::Flush() {
   if (cnt_ == 0) return;
 
-  // for (int i = 0; i < kVinNumPerShard; i++) {
-  //   if (mem_latest_row_ts[i] > latest_ts_cache[i]) {
-  //     latest_ts_cache[i] = mem_latest_row_ts[i];
-  //     int idx = mem_latest_row_idx[i];
-  //     auto &row = latest_row_cache[i];
-  //     memcpy(row.vin.vin, engine->vid2vin[idx2vid(shard_id_, i)].c_str(), VIN_LENGTH);
-  //     for (int j = 0; j < columnsNum_; j++) {
-  //       row.columns.insert(std::make_pair(engine->columnsName[i],
-  //       columnArrs_[engine->col2colid[engine->columnsName[i]]]->Get(idx)));
-  //     }
-  //   }
-  // }
+  for (int i = 0; i < kVinNumPerShard; i++) {
+    if (mem_latest_row_ts[i] > latest_ts_cache[i]) {
+      latest_ts_cache[i] = mem_latest_row_ts[i];
+      int idx = mem_latest_row_idx[i];
+      for (int j = 0; j < columnsNum_; j++) {
+        columnArrs_[engine->col2colid[engine->columnsName[j]]]->Get(idx, latest_ts_cols[i][j]);
+      }
+    }
+    mem_latest_row_ts[i] = -1;
+    mem_latest_row_idx[i] = -1;
+  }
 
   BlockMeta* meta = block_manager_->NewVinBlockMeta(shard_id_, cnt_, min_ts_, max_ts_);
   for (int i = 0; i < columnsNum_; i++) {
@@ -240,15 +236,8 @@ void MemTable::GetRowsFromTimeRange(uint64_t vid, int64_t lowerInclusive, int64_
       findMatchingIndices(tmp_vid_col->GetDataArr(), tmp_ts_col->GetDataArr(), tmp_idx_col->GetDataArr(), blk_meta->num,
                           vid, lowerInclusive, upperExclusive, idxs, tss);
 
-      // for (int i = 0; i < blk_meta->num; i++) {
-      //   if (tmp_vid_col->GetVal(i) == (int64_t) vid && inRange(tmp_ts_col->GetVal(i), lowerInclusive,
-      //   upperExclusive)) {
-      //     idxs.emplace_back(i);
-      //   }
-      // }
-
       if (!idxs.empty()) {
-        for (int i = 0; i < idxs.size(); i++) {
+        for (int i = 0; i < (int)idxs.size(); i++) {
           // build res row
           Row resultRow;
           resultRow.timestamp = tss[i];
@@ -281,14 +270,10 @@ void MemTable::SaveLatestRowCache(File* file) {
     if (latest_ts_cache[i] == -1) {
       continue;
     }
-    auto& row = latest_row_cache[i];
     file->write((char*)&i, sizeof(i));
-    file->write(row.vin.vin, VIN_LENGTH);
-    file->write((char*)&row.timestamp, sizeof(row.timestamp));
+    file->write((char*)(&latest_ts_cache[i]), sizeof(latest_ts_cache[i]));
     for (int k = 0; k < columnsNum_; k++) {
-      auto pair = row.columns.find(engine->columnsName[k]);
-      LOG_ASSERT(pair != row.columns.end(), "error");
-      auto col = pair->second;
+      auto& col = latest_ts_cols[i][k];
       switch (engine->columnsType[k]) {
         case COLUMN_TYPE_STRING: {
           std::pair<int32_t, const char*> lengthStrPair;
@@ -318,31 +303,26 @@ void MemTable::LoadLatestRowCache(File* file) {
   for (int i = 0; i < kVinNumPerShard; i++) {
     if (file->read((char*)&i, sizeof(i)) == Status::END) break;
     // 需要存kVinNumPerShard个row
-    auto& row = latest_row_cache[i];
-    file->read(row.vin.vin, VIN_LENGTH);
-    file->read((char*)&row.timestamp, sizeof(row.timestamp));
-    latest_ts_cache[i] = row.timestamp;
+    file->read((char*)(&latest_ts_cache[i]), sizeof(latest_ts_cache[i]));
     for (int k = 0; k < columnsNum_; k++) {
+      auto& col = latest_ts_cols[i][k];
       switch (engine->columnsType[k]) {
         case COLUMN_TYPE_STRING: {
           int32_t len;
           file->read((char*)&len, sizeof(len));
           char buf[len];
           file->read(buf, len);
-          ColumnValue col(buf, len);
-          row.columns.emplace(std::make_pair(engine->columnsName[k], col));
+          col = std::move(ColumnValue(buf, len));
         } break;
         case COLUMN_TYPE_INTEGER: {
           int num;
           file->read((char*)&num, sizeof(num));
-          ColumnValue col(num);
-          row.columns.emplace(std::make_pair(engine->columnsName[k], col));
+          col = std::move(ColumnValue(num));
         } break;
         case COLUMN_TYPE_DOUBLE_FLOAT: {
           double num;
           file->read((char*)&num, sizeof(num));
-          ColumnValue col(num);
-          row.columns.emplace(std::make_pair(engine->columnsName[k], col));
+          col = std::move(ColumnValue(num));
         } break;
         case COLUMN_TYPE_UNINITIALIZED:
           LOG_ASSERT(false, "error");

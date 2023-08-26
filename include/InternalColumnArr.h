@@ -85,15 +85,25 @@ public:
       case COLUMN_TYPE_STRING:
         LOG_ASSERT(false, "should not run here");
       case COLUMN_TYPE_INTEGER: {
-        value.columnType = COLUMN_TYPE_INTEGER;
-        value.columnData = (char*)malloc(sizeof(int32_t));
-        *((int32_t*)value.columnData) = (int32_t)datas[idx];
+        if (value.getColumnType() != COLUMN_TYPE_INTEGER) {
+          free(value.columnData);
+          value.columnType = COLUMN_TYPE_INTEGER;
+          value.columnData = (char*)malloc(sizeof(int32_t));
+          *((int32_t*)value.columnData) = (int32_t)datas[idx];
+        } else {
+          *((int32_t*)value.columnData) = (int32_t)datas[idx];
+        }
         return;
       }
       case COLUMN_TYPE_DOUBLE_FLOAT: {
-        value.columnType = COLUMN_TYPE_DOUBLE_FLOAT;
-        value.columnData = (char*)malloc(sizeof(double));
-        *((double*)value.columnData) = (double)datas[idx];
+        if (value.getColumnType() != COLUMN_TYPE_DOUBLE_FLOAT) {
+          free(value.columnData);
+          value.columnType = COLUMN_TYPE_DOUBLE_FLOAT;
+          value.columnData = (char*)malloc(sizeof(double));
+          *((double*)value.columnData) = (double)datas[idx];
+        } else {
+          *((double*)value.columnData) = (double)datas[idx];
+        }
         return;
       }
       case COLUMN_TYPE_UNINITIALIZED:
@@ -173,6 +183,7 @@ public:
   }
 
   void Get(int idx, ColumnValue& value) {
+    free(value.columnData);
     uint32_t off = offsets[idx];
     uint32_t len = 0;
     len = offsets[idx + 1] - offsets[idx];

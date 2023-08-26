@@ -1,6 +1,8 @@
 #pragma once
 
 #include <cstdint>
+#include <cstring>
+#include <utility>
 
 #include "InternalColumnArr.h"
 #include "ShardBlockMetaManager.h"
@@ -27,6 +29,7 @@ public:
     block_manager_ = new ShardBlockMetaManager(columnsNum_ + kExtraColNum);
     for (int i = 0; i < kVinNumPerShard; i++) {
       interval_trees[i] = nullptr;
+      latest_ts_cache[i] = -1;
     }
   }
 
@@ -52,10 +55,31 @@ public:
    */
   void Add(const Row& row, uint16_t vid);
 
-  const Row& GetLatestRow(uint16_t vid) {
+  void GetLatestRow(uint16_t vid, Row& row, std::vector<int>& colids) {
     int idx = vid2idx(vid);
 
-    return latest_row_cache[idx];
+    if (mem_latest_row_ts[idx] > latest_ts_cache[idx]) {
+      // 说明最新的row在内存当中
+      int mem_lat_idx = mem_latest_row_idx[idx];
+      row.timestamp = mem_latest_row_ts[idx];
+      memcpy(row.vin.vin, engine->vid2vin[vid].c_str(), VIN_LENGTH);
+      for (auto col_id : colids) {
+        ColumnValue col_value;
+        auto& col_name = engine->columnsName[col_id];
+        columnArrs_[col_id]->Get(mem_lat_idx, col_value);
+        row.columns.insert(std::make_pair(col_name, std::move(col_value)));
+      }
+    } else {
+      row.timestamp = latest_ts_cache[idx];
+      memcpy(row.vin.vin, engine->vid2vin[vid].c_str(), VIN_LENGTH);
+      for (auto col_id : colids) {
+        ColumnValue col_value;
+        auto& col_name = engine->columnsName[col_id];
+        row.columns.insert(std::make_pair(col_name, latest_ts_cols[idx][col_id]));
+      }
+    }
+
+    LOG_ASSERT(row.timestamp != -1, "???");
   }
 
   void Flush();
@@ -128,7 +152,8 @@ private:
   ShardBlockMetaManager* block_manager_;
 
   // LatestQueryCache
-  Row latest_row_cache[kVinNumPerShard];
+  // Row latest_row_cache[kVinNumPerShard];
+  ColumnValue latest_ts_cols[kVinNumPerShard][kColumnNum];
   int64_t latest_ts_cache[kVinNumPerShard];
 
   // mem latest row idx and ts
@@ -167,13 +192,13 @@ public:
     memtables[shard_id]->Add(row, vid);
   }
 
-  const Row& GetLatestRow(uint16_t vid) {
+  void GetLatestRow(uint16_t vid, Row& row, std::vector<int>& colids) {
     int shard_id = Shard(vid);
 
     rwlcks[shard_id].rlock();
     defer { rwlcks[shard_id].unlock(); };
 
-    return memtables[shard_id]->GetLatestRow(vid);
+    memtables[shard_id]->GetLatestRow(vid, row, colids);
   }
 
   void GetRowsFromTimeRange(uint64_t vid, int64_t lowerInclusive, int64_t upperExclusive,
