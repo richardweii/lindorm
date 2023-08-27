@@ -10,11 +10,13 @@
 #include "TSDBEngineImpl.h"
 #include "common.h"
 #include "filename.h"
+#include "io/file.h"
 #include "io/file_manager.h"
 #include "status.h"
 #include "struct/ColumnValue.h"
 #include "struct/Row.h"
 #include "struct/Vin.h"
+#include "util/aligned_buffer.h"
 #include "util/defer.h"
 #include "util/logging.h"
 #include "util/rwlock.h"
@@ -37,6 +39,7 @@ public:
       delete columnArrs_[i];
     }
 
+    delete buffer;
     delete[] columnArrs_;
     delete vid_col;
     delete ts_col;
@@ -76,10 +79,10 @@ public:
     LOG_ASSERT(row.timestamp != -1, "???");
   }
 
-  void Flush();
+  void Flush(bool shutdown = false);
 
-  void GetRowsFromTimeRange(uint64_t vid, int64_t lowerInclusive, int64_t upperExclusive,
-                            std::vector<int> colids, std::vector<Row>& results);
+  void GetRowsFromTimeRange(uint64_t vid, int64_t lowerInclusive, int64_t upperExclusive, std::vector<int> colids,
+                            std::vector<Row>& results);
 
   // 清空状态
   void Reset() {
@@ -99,9 +102,7 @@ public:
 
   void SaveBlockMeta(File* file) { block_manager_->Save(file, shard_id_); }
 
-  void LoadBlockMeta(File* file) {
-    block_manager_->Load(file, shard_id_);
-  }
+  void LoadBlockMeta(File* file) { block_manager_->Load(file, shard_id_); }
 
   void SaveLatestRowCache(File* file);
 
@@ -150,6 +151,8 @@ private:
   // mem latest row idx and ts
   int64_t mem_latest_row_idx[kVinNumPerShard];
   int64_t mem_latest_row_ts[kVinNumPerShard];
+
+  AlignedBuffer* buffer;
 };
 
 /**
@@ -189,8 +192,8 @@ public:
     memtables[shard_id]->GetLatestRow(vid, row, colids);
   }
 
-  void GetRowsFromTimeRange(uint64_t vid, int64_t lowerInclusive, int64_t upperExclusive,
-                            std::vector<int> colids, std::vector<Row>& results) {
+  void GetRowsFromTimeRange(uint64_t vid, int64_t lowerInclusive, int64_t upperExclusive, std::vector<int> colids,
+                            std::vector<Row>& results) {
     int shard_id = Shard(vid);
 
     rwlcks[shard_id].rlock();
@@ -199,7 +202,7 @@ public:
     memtables[shard_id]->GetRowsFromTimeRange(vid, lowerInclusive, upperExclusive, colids, results);
   }
 
-  void Flush(int shard_id) { memtables[shard_id]->Flush(); }
+  void Flush(int shard_id) { memtables[shard_id]->Flush(true); }
 
   void SaveBlockMeta(int shard_id, File* file) { memtables[shard_id]->SaveBlockMeta(file); }
 

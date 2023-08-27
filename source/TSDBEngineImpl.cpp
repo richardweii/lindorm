@@ -190,14 +190,14 @@ int TSDBEngineImpl::shutdown() {
   // save block meta
   for (int i = 0; i < kShardNum; i++) {
     std::string filename = ShardMetaFileName(dataDirPath, kTableName, i);
-    File* file = file_manager_->Open(filename);
+    File* file = file_manager_->Open(filename, NORMAL_FLAG);
     shard_memtable_->SaveBlockMeta(i, file);
   }
 
   // save latest row cache
   for (int i = 0; i < kShardNum; i++) {
     std::string filename = LatestRowFileName(dataDirPath, kTableName, i);
-    File* file = file_manager_->Open(filename);
+    File* file = file_manager_->Open(filename, NORMAL_FLAG);
     shard_memtable_->SaveLatestRowCache(i, file);
   }
 
@@ -205,7 +205,7 @@ int TSDBEngineImpl::shutdown() {
   {
     vin2vid_lck.wlock();
     std::string filename = Vin2vidFileName(dataDirPath, kTableName);
-    File* file = file_manager_->Open(filename);
+    File* file = file_manager_->Open(filename, NORMAL_FLAG);
     int num = vin2vid.size();
     file->write((char*)&num, sizeof(num));
     for (auto& pair : vin2vid) {
@@ -229,42 +229,14 @@ int TSDBEngineImpl::shutdown() {
   return 0;
 }
 
-// static std::atomic<int> flag = 0;
-// int cnt[kVinNum] = {0};
-// std::mutex mutex;
-
 int TSDBEngineImpl::upsert(const WriteRequest& writeRequest) {
-  // static std::atomic<int> upsert_cnt = 0;
   RECORD_FETCH_ADD(write_cnt, writeRequest.rows.size());
 
   for (auto& row : writeRequest.rows) {
     uint16_t vid = write_get_vid(row.vin);
-    // if (vid == 0 && upsert_cnt++ < 100) {
-    //   print_row(row, vid);
-    // }
     LOG_ASSERT(vid != UINT16_MAX, "error");
     shard_memtable_->Add(row, vid);
   }
-
-  // if (flag.load() < 10) {
-  //   mutex.lock();
-  //   if (flag.load() < 10) {
-  //     flag += 1;
-  //     memset(cnt, 0, sizeof(int)*kVinNum);
-  //     for (auto &row : writeRequest.rows) {
-  //       uint16_t vid = write_get_vid(row.vin);
-  //       cnt[vid]++;
-  //     }
-  //     printf("*************\n");
-  //     for (int i = 0; i < kVinNum; i++) {
-  //       if (cnt[i] != 0) {
-  //         printf("vid %d cnt %d | ", i, cnt[i]);
-  //       }
-  //     }
-  //     printf("\n*************\n");
-  //   }
-  //   mutex.unlock();
-  // }
 
   return 0;
 }

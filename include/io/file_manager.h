@@ -20,7 +20,7 @@ class FileManager {
 public:
   bool Exist(std::string filename) { return access(filename.c_str(), F_OK) != -1; }
 
-  File* Open(std::string filename) {
+  File* Open(std::string filename, int flag) {
     rwlock.rlock();
     auto it = outFiles.find(filename);
     if (it != outFiles.cend()) {
@@ -39,7 +39,7 @@ public:
       return pFileOut;
     }
 
-    File* file = new AppendWriteFile(filename);
+    File* file = new AppendWriteFile(filename, flag);
     outFiles.insert(std::make_pair(filename, file));
     rwlock.unlock();
 

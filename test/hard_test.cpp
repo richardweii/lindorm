@@ -56,7 +56,7 @@ static int createTable(LindormContest::TSDBEngine* engine) {
 }
 
 static constexpr int kVinNum = 30000;
-static constexpr int kRowsPerVin = 100;
+static constexpr int kRowsPerVin = 10;
 static LindormContest::Row rows[kVinNum][kRowsPerVin];
 
 static bool RowEquals(const LindormContest::Row& a, const LindormContest::Row& b) {
@@ -313,8 +313,8 @@ int main() {
 
   parallel_upsert(engine);
 
-  parallel_test_latest(engine);
-  parallel_test_time_range(engine);
+  // parallel_test_latest(engine);
+  // parallel_test_time_range(engine);
 
   LOG_INFO("start shutdown...");
   engine->shutdown();

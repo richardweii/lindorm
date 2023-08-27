@@ -47,6 +47,11 @@ void MemTable::Init() {
     mem_latest_row_idx[i] = -1;
     mem_latest_row_ts[i] = -1;
   }
+
+  std::string file_name = ShardDataFileName(engine->dataDirPath, engine->table_name_, shard_id_);
+  // File* file = file_manager_->Open(file_name, LIBAIO_FLAG);
+  File* file = file_manager_->Open(file_name, NORMAL_FLAG);
+  buffer = new AlignedBuffer(file);
 }
 
 void MemTable::Add(const Row& row, uint16_t vid) {
@@ -93,7 +98,7 @@ void MemTable::sort() {
   quickSort(vid_datas, ts_datas, idx_datas, 0, cnt_ - 1);
 }
 
-void MemTable::Flush() {
+void MemTable::Flush(bool shutdown) {
   if (cnt_ == 0) return;
 
   for (int i = 0; i < kVinNumPerShard; i++) {
@@ -109,18 +114,20 @@ void MemTable::Flush() {
   }
 
   BlockMeta* meta = block_manager_->NewVinBlockMeta(shard_id_, cnt_, min_ts_, max_ts_);
-  std::string file_name = ShardDataFileName(engine->dataDirPath, engine->table_name_, shard_id_);
-  File* file = file_manager_->Open(file_name);
 
   // 先对 vid + ts idx这三列进行排序
   sort();
 
   for (int i = 0; i < columnsNum_; i++) {
-    columnArrs_[i]->Flush(file, cnt_, meta);
+    columnArrs_[i]->Flush(buffer, cnt_, meta);
   }
-  vid_col->Flush(file, cnt_, meta);
-  ts_col->Flush(file, cnt_, meta);
-  idx_col->Flush(file, cnt_, meta);
+  vid_col->Flush(buffer, cnt_, meta);
+  ts_col->Flush(buffer, cnt_, meta);
+  idx_col->Flush(buffer, cnt_, meta);
+
+  if (shutdown) {
+    buffer->Flush();
+  }
 
   Reset();
 }

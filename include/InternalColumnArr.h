@@ -12,6 +12,7 @@
 #include "compress.h"
 #include "io/file_manager.h"
 #include "struct/ColumnValue.h"
+#include "util/aligned_buffer.h"
 #include "util/logging.h"
 #include "util/stat.h"
 
@@ -71,14 +72,14 @@ public:
   }
 
   // 元数据直接写到内存，内存里面的元数据在shutdown的时候会持久化的
-  void Flush(File* file, int cnt, BlockMeta* meta) {
-    uint64_t offset = file->GetFileSz();
+  void Flush(AlignedBuffer* buffer, int cnt, BlockMeta* meta) {
+    uint64_t offset;
     uint64_t input_sz = cnt * sizeof(T);
     uint64_t compress_buf_sz = max_dest_size_func(input_sz);
     char compress_buf[compress_buf_sz];
     uint64_t compress_sz = compress_func((const char*)datas, input_sz, compress_buf, compress_buf_sz);
-    auto ret = file->write((const char*)compress_buf, compress_sz);
-    LOG_ASSERT(ret == Status::OK, "write failed");
+
+    buffer->Add(compress_buf, compress_sz, offset);
 
     meta->offset[col_id] = offset;
     meta->origin_sz[col_id] = input_sz;
@@ -165,8 +166,8 @@ public:
   }
 
   // 元数据直接写到内存，内存里面的元数据在shutdown的时候会持久化的
-  void Flush(File* file, int cnt, BlockMeta* meta) {
-    uint64_t offset = file->GetFileSz();
+  void Flush(AlignedBuffer* buffer, int cnt, BlockMeta* meta) {
+    uint64_t offset;
     uint64_t writesz1 = (cnt + 1) * sizeof(offsets[0]);
     uint64_t writesz2 = datas.size();
     uint64_t input_sz = writesz1 + writesz2;
@@ -177,10 +178,10 @@ public:
     char* compress_buf = new char[compress_buf_sz];
     uint64_t compress_sz = compress_func((const char*)origin, input_sz, compress_buf, compress_buf_sz);
 
-    auto ret = file->write((const char*)compress_buf, compress_sz);
+    buffer->Add(compress_buf, compress_sz, offset);
+
     delete[] origin;
     delete[] compress_buf;
-    LOG_ASSERT(ret == Status::OK, "write failed");
 
     meta->offset[col_id] = offset;
     meta->origin_sz[col_id] = input_sz;
@@ -238,7 +239,7 @@ public:
 
   virtual void Add(const ColumnValue& col, int idx) = 0;
 
-  virtual void Flush(File* file, int cnt, BlockMeta* meta) = 0;
+  virtual void Flush(AlignedBuffer* buffer, int cnt, BlockMeta* meta) = 0;
 
   virtual void Read(File* file, BlockMeta* meta) = 0;
 
@@ -260,7 +261,7 @@ public:
 
   void Add(const ColumnValue& col, int idx) override { arr->Add(col, idx); }
 
-  void Flush(File* file, int cnt, BlockMeta* meta) override { arr->Flush(file, cnt, meta); }
+  void Flush(AlignedBuffer* buffer, int cnt, BlockMeta* meta) override { arr->Flush(buffer, cnt, meta); }
 
   void Read(File* file, BlockMeta* meta) override { arr->Read(file, meta); }
 
@@ -284,7 +285,7 @@ public:
 
   void Add(const ColumnValue& col, int idx) override { arr->Add(col, idx); }
 
-  void Flush(File* file, int cnt, BlockMeta* meta) override { arr->Flush(file, cnt, meta); }
+  void Flush(AlignedBuffer* buffer, int cnt, BlockMeta* meta) override { arr->Flush(buffer, cnt, meta); }
 
   void Read(File* file, BlockMeta* meta) override { arr->Read(file, meta); }
 
@@ -308,7 +309,7 @@ public:
 
   void Add(const ColumnValue& col, int idx) override { arr->Add(col, idx); }
 
-  void Flush(File* file, int cnt, BlockMeta* meta) override { arr->Flush(file, cnt, meta); }
+  void Flush(AlignedBuffer* buffer, int cnt, BlockMeta* meta) override { arr->Flush(buffer, cnt, meta); }
 
   void Read(File* file, BlockMeta* meta) override { arr->Read(file, meta); }
 
@@ -335,7 +336,7 @@ public:
 
   void Add(const ColumnValue& col, int idx) override { arr->Add(col, idx); }
 
-  void Flush(File* file, int cnt, BlockMeta* meta) override { arr->Flush(file, cnt, meta); }
+  void Flush(AlignedBuffer* buffer, int cnt, BlockMeta* meta) override { arr->Flush(buffer, cnt, meta); }
 
   void Read(File* file, BlockMeta* meta) override { arr->Read(file, meta); }
 
@@ -361,7 +362,7 @@ public:
 
   void Add(const ColumnValue& col, int idx) override { arr->Add(col, idx); }
 
-  void Flush(File* file, int cnt, BlockMeta* meta) override { arr->Flush(file, cnt, meta); }
+  void Flush(AlignedBuffer* buffer, int cnt, BlockMeta* meta) override { arr->Flush(buffer, cnt, meta); }
 
   void Read(File* file, BlockMeta* meta) override { arr->Read(file, meta); }
 
@@ -387,7 +388,7 @@ public:
 
   void Add(const ColumnValue& col, int idx) override { arr->Add(col, idx); }
 
-  void Flush(File* file, int cnt, BlockMeta* meta) override { arr->Flush(file, cnt, meta); }
+  void Flush(AlignedBuffer* buffer, int cnt, BlockMeta* meta) override { arr->Flush(buffer, cnt, meta); }
 
   void Read(File* file, BlockMeta* meta) override { arr->Read(file, meta); }
 

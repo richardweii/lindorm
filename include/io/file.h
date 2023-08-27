@@ -12,6 +12,9 @@
 #include "util/logging.h"
 #include "util/slice.h"
 
+#define LIBAIO_FLAG O_WRONLY | O_APPEND | O_CREAT | O_DIRECT
+#define NORMAL_FLAG O_WRONLY | O_APPEND | O_CREAT
+
 namespace LindormContest {
 
 inline void RemoveFile(std::string file_name) {
@@ -61,9 +64,8 @@ protected:
 
 class AppendWriteFile : public File {
 public:
-  AppendWriteFile(const std::string& filename) : filename(filename) {
-    // fd_ = open(filename.c_str(), O_WRONLY | O_APPEND | O_CREAT | O_DIRECT, 0600);
-    fd_ = open(filename.c_str(), O_WRONLY | O_APPEND | O_CREAT, 0600);
+  AppendWriteFile(const std::string& filename, int flag) : filename(filename) {
+    fd_ = open(filename.c_str(), flag, 0600);
 
     LOG_ASSERT(fd_ >= 0, "fd_ is %d", fd_);
   }
@@ -87,10 +89,9 @@ public:
     return Status::OK;
   };
 
-  static void write_done(io_context_t ctx, struct iocb* iocb, long res, long res2) { LOG_INFO("write done"); }
+  static void write_done(io_context_t ctx, struct iocb* iocb, long res, long res2) {}
 
   Status async_write(const char* buf, size_t length) override {
-    io_context_t ctx;
     memset(&ctx, 0, sizeof(io_context_t));
     int ret = io_setup(1, &ctx);
     LOG_ASSERT(ret == 0, "io_setup error ret = %d", ret);
@@ -110,7 +111,6 @@ public:
       }
     }
 
-    io_destroy(ctx);
     return Status::OK;
   }
 
@@ -120,9 +120,11 @@ public:
     if (fd_ != -1) {
       close(fd_);
     }
+    io_destroy(ctx);
   }
 
 private:
+  io_context_t ctx;
   std::string filename;
   off_t file_sz = 0;
 };
