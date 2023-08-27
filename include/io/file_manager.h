@@ -9,6 +9,7 @@
 
 #include "io/file.h"
 #include "util/defer.h"
+#include "util/rwlock.h"
 
 namespace LindormContest {
 
@@ -20,17 +21,28 @@ public:
   bool Exist(std::string filename) { return access(filename.c_str(), F_OK) != -1; }
 
   File* Open(std::string filename) {
-    globalMutex.lock();
-    defer { globalMutex.unlock(); };
-
+    rwlock.rlock();
     auto it = outFiles.find(filename);
     if (it != outFiles.cend()) {
       auto pFileOut = it->second;
+      rwlock.unlock();
+      return pFileOut;
+    }
+
+    rwlock.unlock();
+
+    rwlock.wlock();
+    it = outFiles.find(filename);
+    if (it != outFiles.cend()) {
+      auto pFileOut = it->second;
+      rwlock.unlock();
       return pFileOut;
     }
 
     File* file = new AppendWriteFile(filename);
     outFiles.insert(std::make_pair(filename, file));
+    rwlock.unlock();
+
     return file;
   }
 
@@ -42,7 +54,7 @@ public:
 
 private:
   // TODO: 后续自己实现哈希表，细粒度锁
-  std::mutex globalMutex;
+  RWLock rwlock;
   std::unordered_map<std::string, File*> outFiles;
 };
 

@@ -36,9 +36,9 @@ int play_libaio() {
   struct iocb io, *p = &io;
   struct io_event event[MAX_EVENT];
   void* buf;
-  posix_memalign(&buf, 512, 512);
+  posix_memalign(&buf, BUF_LEN, BUF_LEN);
   memset(buf, 0, BUF_LEN);
-  strcpy((char*)buf, "hello libaio");
+  // strcpy((char*)buf, "hello libaio");
   memset(&io_context, 0, sizeof(io_context));
 
   if (io_setup(10, &io_context)) {
@@ -49,7 +49,7 @@ int play_libaio() {
     printf("open file error");
     return 0;
   }
-  io_prep_pwrite(&io, fd, buf, 512, 0);
+  io_prep_pread(&io, fd, buf, BUF_LEN, 0);
   io_set_callback(&io, callback);
   if (io_submit(io_context, 1, &p) < 0) {
     printf("io_submit error");
@@ -64,17 +64,72 @@ int play_libaio() {
     io_callback(io_context, event[i].obj, event[i].res, event[i].res2);
   }
 
+  printf("%s\n", buf);
+
   close(fd);
   return 0;
 }
 
+#include <bitset>
+#include <iostream>
+#include <vector>
+
+// class BitmapCompressor {
+// public:
+//   std::string compress(const std::vector<int>& data) {
+//     std::bitset<256> bitmap;
+
+//     for (int val : data) {
+//       if (val >= 0 && val <= 255) {
+//         bitmap.set(val);
+//       } else {
+//         std::cerr << "Input value " << val << " is out of range [0, 255]." << std::endl;
+//       }
+//     }
+
+//     return bitmap.to_string();
+//   }
+
+//   std::vector<int> decompress(const std::string& compressedData, size_t originalSize) {
+//     std::vector<int> decompressedData;
+//     std::bitset<256> bitmap(compressedData);
+
+//     size_t numDecompressed = 0;
+//     for (size_t i = 0; i < bitmap.size() && numDecompressed < originalSize; ++i) {
+//       if (bitmap.test(i)) {
+//         decompressedData.push_back(static_cast<int>(i));
+//         ++numDecompressed;
+//       }
+//     }
+
+//     return decompressedData;
+//   }
+// };
+
+// void play_bit_compress() {
+//   BitmapCompressor bit_comp;
+//   srandom(time(NULL));
+//   std::vector<int> inputData = {/* Your list of integers here */};
+//   for (int i = 0; i < 2048; i++) {
+//     inputData.emplace_back(rand() % 255 + 1);
+//   }
+//   std::string compressedData = bit_comp.compress(inputData);
+
+//   std::cout << "bitmap Compressed rate: " << (compressedData.size() * 1.0) / (4 * 2048) << std::endl;
+
+//   auto res = bit_comp.decompress(compressedData, 2048);
+//   for (int i = 0; i < 2048; i++) {
+//     LOG_ASSERT(inputData[i] == res[i], "i %d inputData[i] %d res[i] %d", i, inputData[i], res[i]);
+//   }
+// }
+
 void play_zstd() {
   srandom(time(NULL));
-  constexpr int CNT = 5000;
+  constexpr int CNT = 2048;
   constexpr int MAX = 23421;
   int nums[CNT];
   for (int i = 1; i < CNT; i++) {
-    nums[i] = nums[i - 1] + (rand() % 30 + 1);
+    nums[i] = rand() % 255 + 1;
   }
 
   int origin_sz = sizeof(int) * CNT;
@@ -82,7 +137,7 @@ void play_zstd() {
   char* compress_buf = new char[compress_buf_sz];
   int compress_sz = LindormContest::compress_func((char*)nums, origin_sz, compress_buf, compress_buf_sz);
 
-  LOG_INFO("origin_sz %d compress_sz %d, compress_ratio = %f", origin_sz, compress_sz,
+  LOG_INFO("zstd origin_sz %d compress_sz %d, compress_ratio = %f", origin_sz, compress_sz,
            (compress_sz * 1.0) / (origin_sz * 1.0));
 }
 
@@ -139,7 +194,62 @@ void play_binary_serch() {
   }
 }
 
+class ArithmeticEncoder {
+public:
+  std::string encode(const std::vector<int>& data) {
+    // Calculate symbol frequencies
+    std::map<int, int> frequencies;
+    for (int val : data) {
+      if (val >= 0 && val <= 255) {
+        frequencies[val]++;
+      } else {
+        std::cerr << "Input value " << val << " is out of range [0, 255]." << std::endl;
+      }
+    }
+
+    // Build cumulative frequency table
+    int totalSymbols = data.size();
+    int cumulativeFrequency = 0;
+    for (auto& entry : frequencies) {
+      int symbol = entry.first;
+      int frequency = entry.second;
+      cumulativeFrequency += frequency;
+      cumulativeFrequencies[symbol] = cumulativeFrequency / static_cast<double>(totalSymbols);
+    }
+
+    // Encode the data
+    double low = 0.0;
+    double high = 1.0;
+    for (int val : data) {
+      double range = high - low;
+      high = low + range * cumulativeFrequencies[val];
+      low = low + range * cumulativeFrequencies[val - 1];
+    }
+
+    // Convert the encoded range to binary
+    std::string encodedData = doubleToBinary(low);
+
+    return encodedData;
+  }
+
+private:
+  std::map<int, double> cumulativeFrequencies;
+
+  std::string doubleToBinary(double value) {
+    std::string binary;
+    for (int i = 0; i < 32; ++i) {
+      value *= 2;
+      int bit = static_cast<int>(value);
+      binary += std::to_string(bit);
+      if (value >= 1) {
+        value -= 1;
+      }
+    }
+    return binary;
+  }
+};
+
 int main() {
-  play_binary_serch();
+  play_libaio();
   return 0;
 }

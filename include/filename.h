@@ -15,11 +15,9 @@ static inline std::string NumToStr(T num) {
   return oss.str();
 }
 
-// 对于每个shard，其中每一列所存的文件名
-inline std::string ColFileName(const std::string& kDataDirPath, const std::string& tableName, uint16_t shardid,
-                               const std::string& colName) {
+inline std::string ShardDataFileName(const std::string& kDataDirPath, const std::string& tableName, uint16_t shardid) {
   LOG_ASSERT(kDataDirPath != "", "kDataDirPath: %s", kDataDirPath.c_str());
-  return kDataDirPath + "/" + tableName + "_" + NumToStr<uint16_t>(shardid) + "_" + colName;
+  return kDataDirPath + "/" + tableName + "_" + NumToStr<uint16_t>(shardid) + ".data";
 }
 
 // 每个shard的元数据的文件名

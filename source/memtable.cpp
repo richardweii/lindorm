@@ -7,6 +7,7 @@
 
 #include "InternalColumnArr.h"
 #include "common.h"
+#include "filename.h"
 #include "io/file.h"
 #include "struct/ColumnValue.h"
 #include "struct/Vin.h"
@@ -108,34 +109,18 @@ void MemTable::Flush() {
   }
 
   BlockMeta* meta = block_manager_->NewVinBlockMeta(shard_id_, cnt_, min_ts_, max_ts_);
-  for (int i = 0; i < columnsNum_; i++) {
-    // filename = vin + colname
-    std::string file_name = ColFileName(engine->dataDirPath, engine->table_name_, shard_id_, engine->columnsName[i]);
-    File* file = file_manager_->Open(file_name);
-
-    columnArrs_[i]->Flush(file, cnt_, meta);
-  }
+  std::string file_name = ShardDataFileName(engine->dataDirPath, engine->table_name_, shard_id_);
+  File* file = file_manager_->Open(file_name);
 
   // 先对 vid + ts idx这三列进行排序
   sort();
 
-  {
-    std::string file_name = ColFileName(engine->dataDirPath, engine->table_name_, shard_id_, kVidColName);
-    File* file = file_manager_->Open(file_name);
-    vid_col->Flush(file, cnt_, meta);
+  for (int i = 0; i < columnsNum_; i++) {
+    columnArrs_[i]->Flush(file, cnt_, meta);
   }
-
-  {
-    std::string file_name = ColFileName(engine->dataDirPath, engine->table_name_, shard_id_, kTsColName);
-    File* file = file_manager_->Open(file_name);
-    ts_col->Flush(file, cnt_, meta);
-  }
-
-  {
-    std::string file_name = ColFileName(engine->dataDirPath, engine->table_name_, shard_id_, kIdxColName);
-    File* file = file_manager_->Open(file_name);
-    idx_col->Flush(file, cnt_, meta);
-  }
+  vid_col->Flush(file, cnt_, meta);
+  ts_col->Flush(file, cnt_, meta);
+  idx_col->Flush(file, cnt_, meta);
 
   Reset();
 }
@@ -172,6 +157,9 @@ void MemTable::GetRowsFromTimeRange(uint64_t vid, int64_t lowerInclusive, int64_
   // 然后读落盘的block
   std::vector<BlockMeta*> blk_metas;
   block_manager_->GetVinBlockMetasByTimeRange(vid, lowerInclusive, upperExclusive, blk_metas);
+  std::string file_name = ShardDataFileName(engine->dataDirPath, engine->table_name_, shard_id_);
+  RandomAccessFile file(file_name);
+
   if (!blk_metas.empty()) {
     RECORD_FETCH_ADD(tr_disk_blk_query_cnt, blk_metas.size());
     for (auto blk_meta : blk_metas) {
@@ -197,29 +185,11 @@ void MemTable::GetRowsFromTimeRange(uint64_t vid, int64_t lowerInclusive, int64_
             LOG_ASSERT(false, "error");
             break;
         }
-        std::string file_name =
-          ColFileName(engine->dataDirPath, engine->table_name_, shard_id_, engine->columnsName[col_id]);
-        RandomAccessFile file(file_name);
         cols[icol_idx++]->Read(&file, blk_meta);
       }
-
-      {
-        std::string file_name = ColFileName(engine->dataDirPath, engine->table_name_, shard_id_, kVidColName);
-        RandomAccessFile file(file_name);
-        tmp_vid_col->Read(&file, blk_meta);
-      }
-
-      {
-        std::string file_name = ColFileName(engine->dataDirPath, engine->table_name_, shard_id_, kTsColName);
-        RandomAccessFile file(file_name);
-        tmp_ts_col->Read(&file, blk_meta);
-      }
-
-      {
-        std::string file_name = ColFileName(engine->dataDirPath, engine->table_name_, shard_id_, kIdxColName);
-        RandomAccessFile file(file_name);
-        tmp_idx_col->Read(&file, blk_meta);
-      }
+      tmp_vid_col->Read(&file, blk_meta);
+      tmp_ts_col->Read(&file, blk_meta);
+      tmp_idx_col->Read(&file, blk_meta);
 
       // 现在vid + ts是有序的，可以直接应用二分查找
       std::vector<uint16_t> idxs;
