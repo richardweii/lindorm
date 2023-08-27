@@ -148,7 +148,7 @@ public:
 template <>
 class ColumnArr<std::string> {
 public:
-  ColumnArr(int col_id) : col_id(col_id), offset(0) {}
+  ColumnArr(int col_id) : col_id(col_id), offset(0) { offsets[0] = 0; }
   ~ColumnArr() {}
 
   void Add(const ColumnValue& col, int idx) {
@@ -158,17 +158,16 @@ public:
     col.getStringValue(pair);
     std::string str(pair.second, pair.first);
 
-    offsets[idx] = offset;
     datas.append(str);
 
-    offset += str.size();
+    offset += pair.first;
     offsets[idx + 1] = offset;
   }
 
   // 元数据直接写到内存，内存里面的元数据在shutdown的时候会持久化的
   void Flush(File* file, int cnt, BlockMeta* meta) {
     uint64_t offset = file->GetFileSz();
-    uint64_t writesz1 = cnt * sizeof(offsets[0]);
+    uint64_t writesz1 = (cnt + 1) * sizeof(offsets[0]);
     uint64_t writesz2 = datas.size();
     uint64_t input_sz = writesz1 + writesz2;
     char* origin = new char[input_sz];
@@ -198,8 +197,8 @@ public:
     file->read(compress_data_buf, meta->compress_sz[col_id], offset);
     auto ret = decompress_func(compress_data_buf, origin_data_buf, meta->compress_sz[col_id], meta->origin_sz[col_id]);
     LOG_ASSERT(ret == (int)meta->origin_sz[col_id], "uncompress error");
-    memcpy(offsets, origin_data_buf, sizeof(offsets[0]) * meta->num);
-    datas = std::string(origin_data_buf + sizeof(offsets[0]) * meta->num,
+    memcpy(offsets, origin_data_buf, sizeof(offsets[0]) * (meta->num + 1));
+    datas = std::string(origin_data_buf + sizeof(offsets[0]) * (meta->num + 1),
                         meta->origin_sz[col_id] - sizeof(offsets[0]) * meta->num);
     delete[] compress_data_buf;
     delete[] origin_data_buf;
@@ -221,6 +220,7 @@ public:
 
   void Reset() {
     offset = 0;
+    offsets[0] = 0;
     datas.clear();
   };
 

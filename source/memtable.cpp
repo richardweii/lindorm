@@ -171,15 +171,7 @@ void MemTable::GetRowsFromTimeRange(uint64_t vid, int64_t lowerInclusive, int64_
 
   // 然后读落盘的block
   std::vector<BlockMeta*> blk_metas;
-  if (interval_trees[idx] != nullptr) {
-    Interval query = {lowerInclusive, upperExclusive};
-    std::set<Interval> overlappingIntervals = interval_trees[idx]->searchOverlap(query);
-    for (auto& interval : overlappingIntervals) {
-      blk_metas.emplace_back(interval.meta);
-    }
-  } else {
-    block_manager_->GetVinBlockMetasByTimeRange(vid, lowerInclusive, upperExclusive, blk_metas);
-  }
+  block_manager_->GetVinBlockMetasByTimeRange(vid, lowerInclusive, upperExclusive, blk_metas);
   if (!blk_metas.empty()) {
     RECORD_FETCH_ADD(tr_disk_blk_query_cnt, blk_metas.size());
     for (auto blk_meta : blk_metas) {

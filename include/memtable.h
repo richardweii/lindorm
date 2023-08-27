@@ -16,7 +16,6 @@
 #include "struct/Row.h"
 #include "struct/Vin.h"
 #include "util/defer.h"
-#include "util/interval_tree.h"
 #include "util/logging.h"
 #include "util/rwlock.h"
 
@@ -28,7 +27,6 @@ public:
       : engine(engine), shard_id_(shard_id), columnsNum_(kColumnNum), cnt_(0), file_manager_(engine->file_manager_) {
     block_manager_ = new ShardBlockMetaManager(columnsNum_ + kExtraColNum);
     for (int i = 0; i < kVinNumPerShard; i++) {
-      interval_trees[i] = nullptr;
       latest_ts_cache[i] = -1;
     }
   }
@@ -38,11 +36,7 @@ public:
       LOG_ASSERT(columnArrs_[i] != nullptr, "nullptr");
       delete columnArrs_[i];
     }
-    for (int i = 0; i < kVinNumPerShard; i++) {
-      if (interval_trees[i] != nullptr) {
-        delete interval_trees[i];
-      }
-    }
+
     delete[] columnArrs_;
     delete vid_col;
     delete ts_col;
@@ -106,10 +100,7 @@ public:
   void SaveBlockMeta(File* file) { block_manager_->Save(file, shard_id_); }
 
   void LoadBlockMeta(File* file) {
-    for (int i = 0; i < kVinNumPerShard; i++) {
-      interval_trees[i] = new IntervalTree();
-    }
-    block_manager_->Load(file, shard_id_, interval_trees);
+    block_manager_->Load(file, shard_id_);
   }
 
   void SaveLatestRowCache(File* file);
@@ -159,9 +150,6 @@ private:
   // mem latest row idx and ts
   int64_t mem_latest_row_idx[kVinNumPerShard];
   int64_t mem_latest_row_ts[kVinNumPerShard];
-
-  // 区间查询树，用于加速time range的查找
-  IntervalTree* interval_trees[kVinNumPerShard];
 };
 
 /**

@@ -56,7 +56,7 @@ static int createTable(LindormContest::TSDBEngine* engine) {
 }
 
 static constexpr int kVinNum = 30000;
-static constexpr int kRowsPerVin = 10;
+static constexpr int kRowsPerVin = 100;
 static LindormContest::Row rows[kVinNum][kRowsPerVin];
 
 static bool RowEquals(const LindormContest::Row& a, const LindormContest::Row& b) {
@@ -140,38 +140,47 @@ std::string RandStr() {
 void prepare_data() {
   LOG_INFO("start prepare data...");
 
-  for (int i = 0; i < kVinNum; i++) {
-    for (int j = 0; j < kRowsPerVin; j++) {
-      auto& row = rows[i][j];
-      std::string vin = std::to_string(i);
-      memcpy(row.vin.vin, vin.c_str(), vin.size());
-      row.timestamp = j;
-      // build columns
-      for (int k = 0; k < LindormContest::kColumnNum; k++) {
-        std::string col_name = "c" + std::to_string(k);
-        switch (types[k]) {
-          case 0: {
-            LindormContest::ColumnValue col(j);
-            row.columns.insert(std::make_pair(col_name, col));
-            break;
-          }
-          case 1: {
-            LindormContest::ColumnValue col(j * 1.0);
-            row.columns.insert(std::make_pair(col_name, col));
-            break;
-          }
-          case 2: {
-            // std::string s = RandStr();
-            std::string s = std::string(100, j + '0');
-            LindormContest::ColumnValue col(s);
-            LOG_ASSERT(col.columnType == LindormContest::COLUMN_TYPE_STRING, "???");
-            row.columns.insert(std::make_pair(col_name, col));
-            break;
+  std::vector<std::thread> threads;
+
+  for (int j = 0; j < kRowsPerVin; j++) {
+    threads.emplace_back([](int j) {
+      for (int i = 0; i < kVinNum; i++) {
+        auto& row = rows[i][j];
+        std::string vin = std::to_string(i);
+        memcpy(row.vin.vin, vin.c_str(), vin.size());
+        row.timestamp = j + i * kRowsPerVin;
+        // build columns
+        for (int k = 0; k < LindormContest::kColumnNum; k++) {
+          std::string col_name = "c" + std::to_string(k);
+          switch (types[k]) {
+            case 0: {
+              LindormContest::ColumnValue col(j);
+              row.columns.insert(std::make_pair(col_name, col));
+              break;
+            }
+            case 1: {
+              LindormContest::ColumnValue col(j * 1.0);
+              row.columns.insert(std::make_pair(col_name, col));
+              break;
+            }
+            case 2: {
+              // std::string s = RandStr();
+              std::string s = std::string(100, (j % 26) + 'a');
+              LindormContest::ColumnValue col(s);
+              LOG_ASSERT(col.columnType == LindormContest::COLUMN_TYPE_STRING, "???");
+              row.columns.insert(std::make_pair(col_name, col));
+              break;
+            }
           }
         }
       }
-    }
+    }, j);
   }
+
+  for (auto& th : threads) {
+    th.join();
+  }
+
   LOG_INFO("prepare data finished!");
 }
 
@@ -179,7 +188,7 @@ void parallel_upsert(LindormContest::TSDBEngine* engine) {
   LOG_INFO("start parallel upsert...");
 
   std::vector<std::thread> threads;
-  const int thread_num = 1;
+  const int thread_num = 30;
   const int per_thread_vin_num = kVinNum / thread_num;
   int is[kVinNum];
   int js[kRowsPerVin];
@@ -218,7 +227,7 @@ void parallel_test_latest(LindormContest::TSDBEngine* engine) {
   LOG_INFO("start parallel test latest...");
   // validate executeLatestQuery
   std::vector<std::thread> threads;
-  const int thread_num = 1;
+  const int thread_num = 100;
   const int per_thread_vin_num = kVinNum / thread_num;
 
   for (int t = 0; t < thread_num; t++) {
@@ -237,7 +246,7 @@ void parallel_test_latest(LindormContest::TSDBEngine* engine) {
         engine->executeLatestQuery(pReadReq, pReadRes);
         LOG_ASSERT(pReadRes.size() == 1, "executeLatestQuery failed");
         auto row = pReadRes[0];
-        LOG_ASSERT(RowEquals(row, rows[i][row.timestamp]), "error");
+        LOG_ASSERT(RowEquals(row, rows[i][row.timestamp % kRowsPerVin]), "error");
       }
     });
   }
@@ -249,36 +258,11 @@ void parallel_test_latest(LindormContest::TSDBEngine* engine) {
   LOG_INFO("parallel test latest PASS");
 }
 
-void test_time_range(LindormContest::TSDBEngine* engine) {
-  LOG_INFO("start test time range...");
-  // validate time range
-  for (int i = 0; i < kVinNum; i++) {
-    LindormContest::TimeRangeQueryRequest trR;
-    LindormContest::Vin vin;
-    memcpy(vin.vin, rows[i][0].vin.vin, LindormContest::VIN_LENGTH);
-    trR.vin = vin;
-    trR.tableName = "t1";
-    trR.timeLowerBound = 0;
-    trR.timeUpperBound = kRowsPerVin;
-    for (int j = 0; j < LindormContest::kColumnNum; j++) {
-      std::string col_name = "c" + std::to_string(j);
-      trR.requestedColumns.insert(col_name);
-    }
-    std::vector<LindormContest::Row> trReadRes;
-    int ret = engine->executeTimeRangeQuery(trR, trReadRes);
-    LOG_ASSERT(trReadRes.size() == kRowsPerVin, "size = %zu", trReadRes.size());
-    for (auto& row : trReadRes) {
-      LOG_ASSERT(RowEquals(row, rows[i][row.timestamp]), "not equal");
-    }
-  }
-  LOG_INFO("test time range PASS");
-}
-
 void parallel_test_time_range(LindormContest::TSDBEngine* engine) {
   LOG_INFO("start parallel test time range...");
   // validate time range
   std::vector<std::thread> threads;
-  const int thread_num = 30;
+  const int thread_num = 100;
   const int per_thread_vin_num = kVinNum / thread_num;
 
   for (int t = 0; t < thread_num; t++) {
@@ -289,8 +273,8 @@ void parallel_test_time_range(LindormContest::TSDBEngine* engine) {
         memcpy(vin.vin, rows[i][0].vin.vin, LindormContest::VIN_LENGTH);
         trR.vin = vin;
         trR.tableName = "t1";
-        trR.timeLowerBound = 0;
-        trR.timeUpperBound = kRowsPerVin;
+        trR.timeLowerBound = kRowsPerVin * i;
+        trR.timeUpperBound = kRowsPerVin * i + kRowsPerVin;
         for (int j = 0; j < LindormContest::kColumnNum; j++) {
           std::string col_name = "c" + std::to_string(j);
           trR.requestedColumns.insert(col_name);
@@ -299,7 +283,7 @@ void parallel_test_time_range(LindormContest::TSDBEngine* engine) {
         int ret = engine->executeTimeRangeQuery(trR, trReadRes);
         LOG_ASSERT(trReadRes.size() == kRowsPerVin, "size = %zu", trReadRes.size());
         for (auto& row : trReadRes) {
-          LOG_ASSERT(RowEquals(row, rows[i][row.timestamp]), "not equal");
+          LOG_ASSERT(RowEquals(row, rows[i][row.timestamp % kRowsPerVin]), "not equal");
         }
       }
     });

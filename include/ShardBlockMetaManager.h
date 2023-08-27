@@ -8,7 +8,6 @@
 #include "io/file.h"
 #include "struct/Vin.h"
 #include "util/defer.h"
-#include "util/interval_tree.h"
 #include "util/logging.h"
 
 namespace LindormContest {
@@ -121,7 +120,7 @@ public:
   }
 
   // connect的时候，从文件读取，重新构建VinBlockMetaManager
-  void Load(File* file, int shard_id, IntervalTree** tree) {
+  void Load(File* file, int shard_id) {
     LOG_ASSERT(file != nullptr, "error file");
 
     // block_cnt
@@ -143,12 +142,6 @@ public:
       file->read((char*)p->compress_sz, sizeof(p->compress_sz[0]) * col_num_);
       file->read((char*)p->origin_sz, sizeof(p->origin_sz[0]) * col_num_);
       file->read((char*)p->offset, sizeof(p->offset[0]) * col_num_);
-      for (int k = 0; k < kVinNumPerShard; k++) {
-        LOG_ASSERT(tree[k] != nullptr, "error");
-        if (min_ts[k] != INT64_MAX && max_ts[k] != INT64_MIN) {
-          tree[k]->insert({min_ts[k], max_ts[k], p});
-        }
-      }
     }
   }
 
