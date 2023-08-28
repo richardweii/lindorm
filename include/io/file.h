@@ -5,6 +5,7 @@
 #include <unistd.h>
 
 #include <cstdio>
+#include <thread>
 
 #include "status.h"
 #include "util/libaio.h"
@@ -100,6 +101,8 @@ public:
     io_set_callback(&io, write_done);
     file_sz += length;
     ret = io_submit(ctx, 1, &p);
+    std::this_thread::yield();
+
     LOG_ASSERT(ret == 1, "io_submit error");
 
     struct io_event e;
@@ -109,6 +112,7 @@ public:
         cb(ctx, e.obj, e.res, e.res2);
         break;
       }
+      std::this_thread::yield();
     }
 
     return Status::OK;
@@ -120,7 +124,7 @@ public:
     if (fd_ != -1) {
       close(fd_);
     }
-    io_destroy(ctx);
+    // io_destroy(ctx);
   }
 
 private:

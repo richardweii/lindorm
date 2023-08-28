@@ -49,8 +49,8 @@ void MemTable::Init() {
   }
 
   std::string file_name = ShardDataFileName(engine->dataDirPath, engine->table_name_, shard_id_);
-  // File* file = file_manager_->Open(file_name, LIBAIO_FLAG);
-  File* file = file_manager_->Open(file_name, NORMAL_FLAG);
+  File* file = file_manager_->Open(file_name, LIBAIO_FLAG);
+  // File* file = file_manager_->Open(file_name, NORMAL_FLAG);
   buffer = new AlignedBuffer(file);
 }
 

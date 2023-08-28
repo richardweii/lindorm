@@ -1,5 +1,6 @@
 #pragma once
 
+#include <array>
 #include <cstddef>
 #include <cstdlib>
 #include <cstring>
@@ -15,7 +16,10 @@ namespace LindormContest {
  */
 class AlignedBuffer {
 public:
-  AlignedBuffer(File* file) : file(file) { posix_memalign(&buffer, 512, kAlignedBufferSize); }
+  AlignedBuffer(File* file) : file(file) {
+    posix_memalign(&buffer, 512, kAlignedBufferSize);
+    posix_memalign(&flush_buffer, 512, kAlignedBufferSize);
+  }
 
   virtual ~AlignedBuffer() { free(buffer); }
 
@@ -33,12 +37,12 @@ public:
 
     // buffer满了，下刷
     if (offset == kAlignedBufferSize) {
-      while (flush_buffer != nullptr) {
+      while (flushing) {
         // 循环，直到上一个buffer flush完成
       }
-      flush_buffer = buffer;
+      flushing = true;
+      std::swap(flush_buffer, buffer);
       flush_blk_num += 1;
-      posix_memalign(&buffer, 512, kAlignedBufferSize);
       offset = 0;
       if (len > copy_len) {
         // 数据还有部分没有拷贝完成
@@ -47,21 +51,24 @@ public:
       }
 
       // 异步写
-      file->write((const char*)flush_buffer, kAlignedBufferSize);
-      free(flush_buffer);
-      flush_buffer = nullptr;
+      file->async_write((const char*)flush_buffer, kAlignedBufferSize);
+      flushing = false;
     }
   }
 
   void Flush() {
-    while (flush_buffer != nullptr) {
+    while (flushing) {
       // 循环，直到上一个buffer flush完成
     }
-    file->write((const char*)buffer, offset);
+    flushing = true;
+    file->async_write((const char*)buffer, kAlignedBufferSize);
+    flushing = false;
+    offset = 0;
   }
 
 private:
-  void* buffer;
+  volatile bool flushing = false;
+  void* buffer = nullptr;
   void* flush_buffer = nullptr;
   int flush_blk_num = 0; // 已经下刷了多少个块了
   int offset = 0;
