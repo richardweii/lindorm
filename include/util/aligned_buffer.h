@@ -2,6 +2,7 @@
 
 #include <array>
 #include <cstddef>
+#include <cstdint>
 #include <cstdlib>
 #include <cstring>
 
@@ -21,7 +22,10 @@ public:
     posix_memalign(&flush_buffer, 512, kAlignedBufferSize);
   }
 
-  virtual ~AlignedBuffer() { free(buffer); }
+  virtual ~AlignedBuffer() {
+    free(buffer);
+    free(flush_buffer);
+  }
 
   void Add(char* compressed_data, int len, OUT uint64_t& file_offset) {
     LOG_ASSERT(offset <= kAlignedBufferSize, "offset = %d", offset);
@@ -34,6 +38,7 @@ public:
     memcpy((char*)buffer + offset, compressed_data, copy_len);
 
     offset += copy_len;
+    LOG_ASSERT(offset <= kAlignedBufferSize, "offset = %d", offset);
 
     // buffer满了，下刷
     if (offset == kAlignedBufferSize) {
@@ -48,12 +53,19 @@ public:
         // 数据还有部分没有拷贝完成
         memcpy(buffer, compressed_data + copy_len, len - copy_len);
         offset += (len - copy_len);
+        LOG_ASSERT(offset <= kAlignedBufferSize, "offset = %d", offset);
       }
 
       // 异步写
       file->async_write((const char*)flush_buffer, kAlignedBufferSize);
       flushing = false;
     }
+  }
+
+  void Read(char* res_buf, size_t length, __off_t pos) {
+    LOG_ASSERT((uint64_t)(pos % kAlignedBufferSize) + (uint64_t)length <= (uint64_t)offset,
+               "(pos mod kAlignedBufferSize) = %ld, offset = %d", (pos % kAlignedBufferSize), offset);
+    memcpy(res_buf, (char*)buffer + (pos % kAlignedBufferSize), length);
   }
 
   void Flush() {
@@ -65,6 +77,10 @@ public:
     flushing = false;
     offset = 0;
   }
+
+  bool empty() { return offset == 0; }
+
+  const int GetFlushBlkNum() const { return flush_blk_num; }
 
 private:
   volatile bool flushing = false;

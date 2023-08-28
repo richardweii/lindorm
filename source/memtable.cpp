@@ -192,11 +192,11 @@ void MemTable::GetRowsFromTimeRange(uint64_t vid, int64_t lowerInclusive, int64_
             LOG_ASSERT(false, "error");
             break;
         }
-        cols[icol_idx++]->Read(&file, blk_meta);
+        cols[icol_idx++]->Read(&file, buffer, blk_meta);
       }
-      tmp_vid_col->Read(&file, blk_meta);
-      tmp_ts_col->Read(&file, blk_meta);
-      tmp_idx_col->Read(&file, blk_meta);
+      tmp_vid_col->Read(&file, buffer, blk_meta);
+      tmp_ts_col->Read(&file, buffer, blk_meta);
+      tmp_idx_col->Read(&file, buffer, blk_meta);
 
       // 现在vid + ts是有序的，可以直接应用二分查找
       std::vector<uint16_t> idxs;

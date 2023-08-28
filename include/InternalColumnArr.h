@@ -88,17 +88,42 @@ public:
     RECORD_ARR_FETCH_ADD(compress_szs, col_id, compress_sz);
   }
 
-  void Read(File* file, BlockMeta* meta) {
+  void Read(File* file, AlignedBuffer* buffer, BlockMeta* meta) {
     LOG_ASSERT(meta != nullptr, "error");
     char compress_data_buf[meta->compress_sz[col_id]];
     uint64_t offset = meta->offset[col_id];
 
-    struct stat st;
-    fstat(file->Fd(), &st);
-    LOG_ASSERT(offset + meta->compress_sz[col_id] <= (uint64_t)st.st_size, "offset %lu read size %lu filesz %lu",
-               offset, meta->compress_sz[col_id], st.st_size);
+    if (buffer->empty()) {
+      // 全部在文件里面
+      struct stat st;
+      fstat(file->Fd(), &st);
+      LOG_ASSERT(offset + meta->compress_sz[col_id] <= (uint64_t)st.st_size, "offset %lu read size %lu filesz %lu",
+                 offset, meta->compress_sz[col_id], st.st_size);
 
-    file->read(compress_data_buf, meta->compress_sz[col_id], offset);
+      file->read(compress_data_buf, meta->compress_sz[col_id], offset);
+    } else {
+      if (offset >= (uint64_t)buffer->GetFlushBlkNum() * (uint64_t)kAlignedBufferSize) {
+        // 全部在buffer里面
+        buffer->Read(compress_data_buf, meta->compress_sz[col_id], offset);
+      } else if (offset + meta->compress_sz[col_id] <= (uint64_t)buffer->GetFlushBlkNum() * (uint64_t)kAlignedBufferSize) {
+        // 全部在文件里面
+        struct stat st;
+        fstat(file->Fd(), &st);
+        LOG_ASSERT(offset + meta->compress_sz[col_id] <= (uint64_t)st.st_size, "offset %lu read size %lu filesz %lu",
+                   offset, meta->compress_sz[col_id], st.st_size);
+
+        file->read(compress_data_buf, meta->compress_sz[col_id], offset);
+      } else {
+        LOG_ASSERT(!buffer->empty(), "buffer is empty");
+        // 一部分在文件里面，一部分在buffer里面
+        struct stat st;
+        fstat(file->Fd(), &st);
+        file->read(compress_data_buf, st.st_size - offset, offset);
+        buffer->Read(compress_data_buf + st.st_size - offset, meta->compress_sz[col_id] - (st.st_size - offset),
+                     st.st_size);
+      }
+    }
+
     auto ret = decompress_func(compress_data_buf, (char*)datas, meta->compress_sz[col_id], meta->origin_sz[col_id]);
     LOG_ASSERT(ret == (int)meta->origin_sz[col_id], "uncompress error");
   }
@@ -190,12 +215,43 @@ public:
     RECORD_ARR_FETCH_ADD(compress_szs, col_id, compress_sz);
   }
 
-  void Read(File* file, BlockMeta* meta) {
+  void Read(File* file, AlignedBuffer* buffer, BlockMeta* meta) {
     LOG_ASSERT(meta != nullptr, "error");
     char* compress_data_buf = new char[meta->compress_sz[col_id]];
     char* origin_data_buf = new char[meta->origin_sz[col_id]];
     uint64_t offset = meta->offset[col_id];
-    file->read(compress_data_buf, meta->compress_sz[col_id], offset);
+
+    if (buffer->empty()) {
+      // 全部在文件里面
+      struct stat st;
+      fstat(file->Fd(), &st);
+      LOG_ASSERT(offset + meta->compress_sz[col_id] <= (uint64_t)st.st_size, "offset %lu read size %lu filesz %lu",
+                 offset, meta->compress_sz[col_id], st.st_size);
+
+      file->read(compress_data_buf, meta->compress_sz[col_id], offset);
+    } else {
+      if (offset >= (uint64_t)buffer->GetFlushBlkNum() * (uint64_t)kAlignedBufferSize) {
+        // 全部在buffer里面
+        buffer->Read(compress_data_buf, meta->compress_sz[col_id], offset);
+      } else if (offset + meta->compress_sz[col_id] <= (uint64_t)buffer->GetFlushBlkNum() * (uint64_t)kAlignedBufferSize) {
+        // 全部在文件里面
+        struct stat st;
+        fstat(file->Fd(), &st);
+        LOG_ASSERT(offset + meta->compress_sz[col_id] <= (uint64_t)st.st_size, "offset %lu read size %lu filesz %lu",
+                   offset, meta->compress_sz[col_id], st.st_size);
+
+        file->read(compress_data_buf, meta->compress_sz[col_id], offset);
+      } else {
+        LOG_ASSERT(!buffer->empty(), "buffer is empty");
+        // 一部分在文件里面，一部分在buffer里面
+        struct stat st;
+        fstat(file->Fd(), &st);
+        file->read(compress_data_buf, st.st_size - offset, offset);
+        buffer->Read(compress_data_buf + st.st_size - offset, meta->compress_sz[col_id] - (st.st_size - offset),
+                     st.st_size);
+      }
+    }
+
     auto ret = decompress_func(compress_data_buf, origin_data_buf, meta->compress_sz[col_id], meta->origin_sz[col_id]);
     LOG_ASSERT(ret == (int)meta->origin_sz[col_id], "uncompress error");
     memcpy(offsets, origin_data_buf, sizeof(offsets[0]) * (meta->num + 1));
@@ -241,7 +297,7 @@ public:
 
   virtual void Flush(AlignedBuffer* buffer, int cnt, BlockMeta* meta) = 0;
 
-  virtual void Read(File* file, BlockMeta* meta) = 0;
+  virtual void Read(File* file, AlignedBuffer* buffer, BlockMeta* meta) = 0;
 
   // TODO: 减少拷贝
   virtual void Get(int idx, ColumnValue& value) = 0;
@@ -263,7 +319,7 @@ public:
 
   void Flush(AlignedBuffer* buffer, int cnt, BlockMeta* meta) override { arr->Flush(buffer, cnt, meta); }
 
-  void Read(File* file, BlockMeta* meta) override { arr->Read(file, meta); }
+  void Read(File* file, AlignedBuffer* buffer, BlockMeta* meta) override { arr->Read(file, buffer, meta); }
 
   void Get(int idx, ColumnValue& value) override { arr->Get(idx, value); }
 
@@ -287,7 +343,7 @@ public:
 
   void Flush(AlignedBuffer* buffer, int cnt, BlockMeta* meta) override { arr->Flush(buffer, cnt, meta); }
 
-  void Read(File* file, BlockMeta* meta) override { arr->Read(file, meta); }
+  void Read(File* file, AlignedBuffer* buffer, BlockMeta* meta) override { arr->Read(file, buffer, meta); }
 
   void Get(int idx, ColumnValue& value) override { arr->Get(idx, value); }
 
@@ -311,7 +367,7 @@ public:
 
   void Flush(AlignedBuffer* buffer, int cnt, BlockMeta* meta) override { arr->Flush(buffer, cnt, meta); }
 
-  void Read(File* file, BlockMeta* meta) override { arr->Read(file, meta); }
+  void Read(File* file, AlignedBuffer* buffer, BlockMeta* meta) override { arr->Read(file, buffer, meta); }
 
   void Get(int idx, ColumnValue& value) override { arr->Get(idx, value); }
 
@@ -338,7 +394,7 @@ public:
 
   void Flush(AlignedBuffer* buffer, int cnt, BlockMeta* meta) override { arr->Flush(buffer, cnt, meta); }
 
-  void Read(File* file, BlockMeta* meta) override { arr->Read(file, meta); }
+  void Read(File* file, AlignedBuffer* buffer, BlockMeta* meta) override { arr->Read(file, buffer, meta); }
 
   void Get(int idx, ColumnValue& value) override { arr->Get(idx, value); }
 
@@ -364,7 +420,7 @@ public:
 
   void Flush(AlignedBuffer* buffer, int cnt, BlockMeta* meta) override { arr->Flush(buffer, cnt, meta); }
 
-  void Read(File* file, BlockMeta* meta) override { arr->Read(file, meta); }
+  void Read(File* file, AlignedBuffer* buffer, BlockMeta* meta) override { arr->Read(file, buffer, meta); }
 
   void Get(int idx, ColumnValue& value) override { arr->Get(idx, value); }
 
@@ -390,7 +446,7 @@ public:
 
   void Flush(AlignedBuffer* buffer, int cnt, BlockMeta* meta) override { arr->Flush(buffer, cnt, meta); }
 
-  void Read(File* file, BlockMeta* meta) override { arr->Read(file, meta); }
+  void Read(File* file, AlignedBuffer* buffer, BlockMeta* meta) override { arr->Read(file, buffer, meta); }
 
   void Get(int idx, ColumnValue& value) override { arr->Get(idx, value); }
 
