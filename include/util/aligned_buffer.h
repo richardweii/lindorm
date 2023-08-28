@@ -73,7 +73,8 @@ public:
       // 循环，直到上一个buffer flush完成
     }
     flushing = true;
-    file->async_write((const char*)buffer, kAlignedBufferSize);
+    AppendWriteFile f(file->GetFileName(), NORMAL_FLAG);
+    f.write((const char*)buffer, offset);
     flushing = false;
     offset = 0;
   }

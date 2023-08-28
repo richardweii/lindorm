@@ -55,6 +55,11 @@ public:
     return Status::NotSupported;
   }
 
+  virtual std::string GetFileName() {
+    LOG_ASSERT(false, "Not implemented");
+    return "";
+  }
+
   virtual ~File() = default;
 
   int Fd() const { return fd_; }
@@ -126,6 +131,8 @@ public:
     }
     // io_destroy(ctx);
   }
+
+  std::string GetFileName() override { return filename; }
 
 private:
   io_context_t ctx;
