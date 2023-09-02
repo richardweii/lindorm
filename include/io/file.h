@@ -72,8 +72,11 @@ class AppendWriteFile : public File {
 public:
   AppendWriteFile(const std::string& filename, int flag) : filename(filename) {
     fd_ = open(filename.c_str(), flag, 0600);
-
     LOG_ASSERT(fd_ >= 0, "fd_ is %d", fd_);
+
+    memset(&ctx, 0, sizeof(io_context_t));
+    int ret = io_setup(1, &ctx);
+    LOG_ASSERT(ret == 0, "io_setup error ret = %d", ret);
   }
 
   Status write(const char* buf, size_t length) override {
@@ -98,14 +101,11 @@ public:
   static void write_done(io_context_t ctx, struct iocb* iocb, long res, long res2) {}
 
   Status async_write(const char* buf, size_t length) override {
-    memset(&ctx, 0, sizeof(io_context_t));
-    int ret = io_setup(1, &ctx);
-    LOG_ASSERT(ret == 0, "io_setup error ret = %d", ret);
     struct iocb io, *p = &io;
     io_prep_pwrite(&io, fd_, (void*)buf, length, file_sz);
     io_set_callback(&io, write_done);
     file_sz += length;
-    ret = io_submit(ctx, 1, &p);
+    int ret = io_submit(ctx, 1, &p);
     std::this_thread::yield();
 
     LOG_ASSERT(ret == 1, "io_submit error");

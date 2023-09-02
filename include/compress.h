@@ -22,7 +22,7 @@ inline uint64_t LZ4Compress(const char* data, uint64_t len, char* compress_buf, 
 }
 
 inline uint64_t ZSTDCompress(const char* data, uint64_t len, char* compress_buf, uint64_t compress_len) {
-  return ZSTD_compress((void*)compress_buf, compress_len, (const void*)data, len, 3);
+  return ZSTD_compress((void*)compress_buf, compress_len, (const void*)data, len, 8);
 }
 
 inline int LZ4DeCompress(const char* src, char* dst, int compressedSize, int dstCapacity) {

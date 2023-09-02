@@ -105,7 +105,8 @@ public:
       if (offset >= (uint64_t)buffer->GetFlushBlkNum() * (uint64_t)kAlignedBufferSize) {
         // 全部在buffer里面
         buffer->Read(compress_data_buf, meta->compress_sz[col_id], offset);
-      } else if (offset + meta->compress_sz[col_id] <= (uint64_t)buffer->GetFlushBlkNum() * (uint64_t)kAlignedBufferSize) {
+      } else if (offset + meta->compress_sz[col_id] <=
+                 (uint64_t)buffer->GetFlushBlkNum() * (uint64_t)kAlignedBufferSize) {
         // 全部在文件里面
         struct stat st;
         fstat(file->Fd(), &st);
@@ -188,27 +189,29 @@ public:
 
     offset += pair.first;
     offsets[idx + 1] = offset;
+    lens[idx] = pair.first;
   }
 
   // 元数据直接写到内存，内存里面的元数据在shutdown的时候会持久化的
   void Flush(AlignedBuffer* buffer, int cnt, BlockMeta* meta) {
     uint64_t offset;
-    uint64_t writesz1 = (cnt + 1) * sizeof(offsets[0]);
+    uint64_t writesz1 = cnt * sizeof(lens[0]);
     uint64_t writesz2 = datas.size();
     uint64_t input_sz = writesz1 + writesz2;
     char* origin = new char[input_sz];
-    memcpy(origin, offsets, writesz1);
+    memcpy(origin, lens, writesz1);
     memcpy(origin + writesz1, datas.c_str(), writesz2);
     uint64_t compress_buf_sz = max_dest_size_func(input_sz);
     char* compress_buf = new char[compress_buf_sz];
     uint64_t compress_sz = compress_func((const char*)origin, input_sz, compress_buf, compress_buf_sz);
 
-    buffer->Add(compress_buf, compress_sz, offset);
+    uint64_t off;
+    buffer->Add(compress_buf, compress_sz, off);
 
     delete[] origin;
     delete[] compress_buf;
 
-    meta->offset[col_id] = offset;
+    meta->offset[col_id] = off;
     meta->origin_sz[col_id] = input_sz;
     meta->compress_sz[col_id] = compress_sz;
     RECORD_ARR_FETCH_ADD(origin_szs, col_id, input_sz);
@@ -233,7 +236,8 @@ public:
       if (offset >= (uint64_t)buffer->GetFlushBlkNum() * (uint64_t)kAlignedBufferSize) {
         // 全部在buffer里面
         buffer->Read(compress_data_buf, meta->compress_sz[col_id], offset);
-      } else if (offset + meta->compress_sz[col_id] <= (uint64_t)buffer->GetFlushBlkNum() * (uint64_t)kAlignedBufferSize) {
+      } else if (offset + meta->compress_sz[col_id] <=
+                 (uint64_t)buffer->GetFlushBlkNum() * (uint64_t)kAlignedBufferSize) {
         // 全部在文件里面
         struct stat st;
         fstat(file->Fd(), &st);
@@ -254,9 +258,17 @@ public:
 
     auto ret = decompress_func(compress_data_buf, origin_data_buf, meta->compress_sz[col_id], meta->origin_sz[col_id]);
     LOG_ASSERT(ret == (int)meta->origin_sz[col_id], "uncompress error");
-    memcpy(offsets, origin_data_buf, sizeof(offsets[0]) * (meta->num + 1));
-    datas = std::string(origin_data_buf + sizeof(offsets[0]) * (meta->num + 1),
-                        meta->origin_sz[col_id] - sizeof(offsets[0]) * meta->num);
+
+    memcpy(lens, origin_data_buf, sizeof(lens[0]) * (meta->num));
+    datas = std::string(origin_data_buf + sizeof(lens[0]) * (meta->num),
+                        meta->origin_sz[col_id] - sizeof(lens[0]) * meta->num);
+
+    offset = 0;
+    for (int i = 0; i < meta->num; i++) {
+      offset += lens[i];
+      offsets[i+1] = offset;
+    }
+
     delete[] compress_data_buf;
     delete[] origin_data_buf;
   }
@@ -286,6 +298,7 @@ public:
 private:
   uint32_t offset;
   uint32_t offsets[kMemtableRowNum + 1];
+  uint16_t lens[kMemtableRowNum];
   std::string datas;
 };
 
