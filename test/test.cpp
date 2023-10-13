@@ -232,9 +232,9 @@ static int writeDataTo(LindormContest::TSDBEngine *engine) {
   row.columns.insert(std::make_pair("t1c3", LindormContest::ColumnValue(str2, 19)));
   wReq.rows.push_back(std::move(row));
 
-  // Execute upsert.
+  // Execute write.
   auto start = std::chrono::high_resolution_clock::now();
-  int ret = engine->upsert(wReq);
+  int ret = engine->write(wReq);
   auto finish = std::chrono::high_resolution_clock::now();
   int64_t elapsedNanos = std::chrono::duration_cast<std::chrono::nanoseconds>(finish - start).count();
   writeProtocolElapsedNanos += elapsedNanos;
@@ -273,7 +273,7 @@ static int writeDataTo(LindormContest::TSDBEngine *engine) {
 
   // // Execute insert.
   // start = std::chrono::high_resolution_clock::now();
-  // ret = engine->upsert(wReq);
+  // ret = engine->write(wReq);
   finish = std::chrono::high_resolution_clock::now();
   elapsedNanos = std::chrono::duration_cast<std::chrono::nanoseconds>(finish - start).count();
   writeProtocolElapsedNanos += elapsedNanos;
@@ -292,7 +292,7 @@ static int writeDataTo(LindormContest::TSDBEngine *engine) {
   row.columns.insert(std::make_pair("t1c3", LindormContest::ColumnValue(str2, 19)));
   wReq.rows.push_back(std::move(row));
   start = std::chrono::high_resolution_clock::now();
-  ret = engine->upsert(wReq);
+  ret = engine->write(wReq);
   finish = std::chrono::high_resolution_clock::now();
   elapsedNanos = std::chrono::duration_cast<std::chrono::nanoseconds>(finish - start).count();
   writeProtocolElapsedNanos += elapsedNanos;

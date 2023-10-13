@@ -22,29 +22,32 @@
 
 namespace LindormContest {
 
-Schema::Schema() = default;
+    Schema::Schema() = default;
 
-Schema::Schema(const std::map<std::string, ColumnType> &columnTypeMap) : columnTypeMap(columnTypeMap) {}
+    Schema::Schema(const std::map<std::string, ColumnType> &columnTypeMap) : columnTypeMap(columnTypeMap) {
+    }
 
-Schema::Schema(std::map<std::string, ColumnType> &&columnTypeMap) : columnTypeMap(std::move(columnTypeMap)) {}
+    Schema::Schema(std::map<std::string, ColumnType> &&columnTypeMap) : columnTypeMap(std::move(columnTypeMap)) {
+    }
 
-Schema::Schema(const Schema &rhs) = default;
+    Schema::Schema(const Schema &rhs) = default;
 
-Schema::Schema(Schema &&rhs) noexcept : columnTypeMap(std::move(rhs.columnTypeMap)) {}
+    Schema::Schema(Schema &&rhs) noexcept : columnTypeMap(std::move(rhs.columnTypeMap)) {
+    }
 
-bool Schema::operator==(const Schema &rhs) const {
-  return columnTypeMap == rhs.columnTypeMap;
+    bool Schema::operator==(const Schema &rhs) const {
+        return columnTypeMap == rhs.columnTypeMap;
+    }
+
+    bool Schema::operator!=(const Schema &rhs) const {
+        return !(rhs == *this);
+    }
+
+    Schema& Schema::operator=(const Schema &rhs) {
+        if (&rhs == this) {
+            return *this;
+        }
+        columnTypeMap = rhs.columnTypeMap;
+        return *this;
+    }
 }
-
-bool Schema::operator!=(const Schema &rhs) const {
-  return !(rhs == *this);
-}
-
-Schema &Schema::operator=(const Schema &rhs) {
-  if (&rhs == this) {
-    return *this;
-  }
-  columnTypeMap = rhs.columnTypeMap;
-  return *this;
-}
-} // namespace LindormContest

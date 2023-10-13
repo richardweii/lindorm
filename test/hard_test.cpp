@@ -185,7 +185,7 @@ void prepare_data() {
 }
 
 void parallel_upsert(LindormContest::TSDBEngine* engine) {
-  LOG_INFO("start parallel upsert...");
+  LOG_INFO("start parallel write...");
 
   std::vector<std::thread> threads;
   const int thread_num = 30;
@@ -210,7 +210,7 @@ void parallel_upsert(LindormContest::TSDBEngine* engine) {
           // for (; i < (t + 1) * per_thread_vin_num && k < 500; k++, i++) {
           wReq.rows.push_back(rows[is[i]][js[j]]);
           // }
-          int ret = engine->upsert(wReq);
+          int ret = engine->write(wReq);
         }
       }
     });
@@ -220,7 +220,7 @@ void parallel_upsert(LindormContest::TSDBEngine* engine) {
     th.join();
   }
 
-  LOG_INFO("parallel upsert end");
+  LOG_INFO("parallel write end");
 }
 
 void parallel_test_latest(LindormContest::TSDBEngine* engine) {

@@ -7,7 +7,6 @@
 
 #ifndef LINDORMTSDBCONTESTCPP_TSDBENGINEIMPL_H
 #define LINDORMTSDBCONTESTCPP_TSDBENGINEIMPL_H
-
 #include <cstdint>
 #include <mutex>
 #include <string>
@@ -23,76 +22,38 @@ namespace LindormContest {
 class ShardMemtable;
 class TSDBEngineImpl : public TSDBEngine {
 public:
-  /**
-   * This constructor's function signature should not be modified.
-   * Our evaluation program will call this constructor.
-   * The function's body can be modified.
-   */
-  explicit TSDBEngineImpl(const std::string& dataDirPath);
+    /**
+     * This constructor's function signature should not be modified.
+     * Our evaluation program will call this constructor.
+     * The function's body can be modified.
+     */
+    explicit TSDBEngineImpl(const std::string &dataDirPath);
 
-  int connect() override;
+    int connect() override;
 
-  int createTable(const std::string& tableName, const Schema& schema) override;
+    int createTable(const std::string &tableName, const Schema &schema) override;
 
-  int shutdown() override;
+    int shutdown() override;
 
-  int upsert(const WriteRequest& wReq) override;
+    int write(const WriteRequest &writeRequest) override;
 
-  int executeLatestQuery(const LatestQueryRequest& pReadReq, std::vector<Row>& pReadRes) override;
+    int executeLatestQuery(const LatestQueryRequest &pReadReq, std::vector<Row> &pReadRes) override;
 
-  int executeTimeRangeQuery(const TimeRangeQueryRequest& trReadReq, std::vector<Row>& trReadRes) override;
+    int executeTimeRangeQuery(const TimeRangeQueryRequest &trReadReq, std::vector<Row> &trReadRes) override;
 
-  ~TSDBEngineImpl() override;
+    int executeAggregateQuery(const TimeRangeAggregationRequest &aggregationReq, std::vector<Row> &aggregationRes) override;
 
+    int executeDownsampleQuery(const TimeRangeDownsampleRequest &downsampleReq, std::vector<Row> &downsampleRes) override;
+
+    ~TSDBEngineImpl() override;
 private:
-  friend class MemTable;
+friend class MemTable;
   void SaveSchema();
   void LoadSchema();
 
-  uint16_t write_get_vid(const Vin& vin) {
-    uint16_t vid = UINT16_MAX;
-    vin2vid_lck.rlock();
-    std::string str(vin.vin, VIN_LENGTH);
-    auto it = vin2vid.find(str);
-    if (LIKELY(it != vin2vid.cend())) {
-      vin2vid_lck.unlock();
-      vid = it->second;
-    } else {
-      vin2vid_lck.unlock();
-      vin2vid_lck.wlock();
-      it = vin2vid.find(str);
-      if (LIKELY(it == vin2vid.cend())) {
-        vid = vid_cnt_;
-        if (vid % 10000 == 9999) {
-          LOG_INFO("vid %d", vid);
-        }
-        vid2vin.emplace(std::make_pair(vid_cnt_, str));
-        vin2vid.emplace(std::make_pair(str, vid_cnt_++));
-        vin2vid_lck.unlock();
-      } else {
-        vid = it->second;
-        vin2vid_lck.unlock();
-      }
-      LOG_ASSERT(vid != UINT16_MAX, "vid == UINT16_MAX");
-    }
+  uint16_t write_get_vid(const Vin& vin);
 
-    return vid;
-  }
-
-  uint16_t read_get_vid(const Vin& vin) {
-    vin2vid_lck.rlock();
-    std::string str(vin.vin, VIN_LENGTH);
-    auto it = vin2vid.find(str);
-    if (it == vin2vid.end()) {
-      vin2vid_lck.unlock();
-      LOG_INFO("查找了一个不存在的vin");
-      return UINT16_MAX;
-    }
-    uint16_t vid = it->second;
-    vin2vid_lck.unlock();
-
-    return vid;
-  }
+  uint16_t read_get_vid(const Vin& vin);
 
   std::string table_name_;
   // How many columns is defined in schema for the sole table.
@@ -115,6 +76,6 @@ private:
   ShardMemtable* shard_memtable_;
 }; // End class TSDBEngineImpl.
 
-} // namespace LindormContest
+}
 
-#endif // LINDORMTSDBCONTESTCPP_TSDBENGINEIMPL_H
+#endif //LINDORMTSDBCONTESTCPP_TSDBENGINEIMPL_H

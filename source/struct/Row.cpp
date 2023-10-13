@@ -22,52 +22,55 @@
 
 namespace LindormContest {
 
-Row::Row(Row &&rhs) noexcept : vin(rhs.vin), timestamp(rhs.timestamp), columns(std::move(rhs.columns)) {}
+    Row::Row(Row &&rhs) noexcept : vin(rhs.vin), timestamp(rhs.timestamp), columns(std::move(rhs.columns)) {
+    }
 
-Row::Row(const Row &rhs) = default;
+    Row::Row(const Row &rhs) = default;
 
-Row::Row() : vin(), timestamp(0), columns() {}
+    Row::Row() : vin(), timestamp(0), columns() {
+    }
 
-bool Row::operator==(const Row &rhs) const {
-  return vin == rhs.vin && timestamp == rhs.timestamp;
+    bool Row::operator==(const Row &rhs) const {
+        return vin == rhs.vin &&
+               timestamp == rhs.timestamp;
+    }
+
+    bool Row::operator!=(const Row &rhs) const {
+        return !(rhs == *this);
+    }
+
+    bool Row::operator<(const Row &rhs) const {
+        int ret = std::memcmp(vin.vin, rhs.vin.vin, VIN_LENGTH);
+        if (ret != 0) {
+            return ret < 0;
+        }
+        return timestamp < rhs.timestamp;
+    }
+
+    bool Row::operator>(const Row &rhs) const {
+        int ret = std::memcmp(vin.vin, rhs.vin.vin, VIN_LENGTH);
+        if (ret != 0) {
+            return ret > 0;
+        }
+        return timestamp > rhs.timestamp;
+    }
+
+    bool Row::operator<=(const Row &rhs) const {
+        return *this < rhs || *this == rhs;
+    }
+
+    bool Row::operator>=(const Row &rhs) const {
+        return *this > rhs || *this == rhs;
+    }
+
+    Row &Row::operator=(const Row &rhs) {
+        if (this == &rhs) {
+            return *this;
+        }
+        vin = rhs.vin;
+        timestamp = rhs.timestamp;
+        columns = rhs.columns;
+        return *this;
+    }
+
 }
-
-bool Row::operator!=(const Row &rhs) const {
-  return !(rhs == *this);
-}
-
-bool Row::operator<(const Row &rhs) const {
-  int ret = std::strncmp(vin.vin, rhs.vin.vin, VIN_LENGTH);
-  if (ret != 0) {
-    return ret < 0;
-  }
-  return timestamp < rhs.timestamp;
-}
-
-bool Row::operator>(const Row &rhs) const {
-  int ret = std::strncmp(vin.vin, rhs.vin.vin, VIN_LENGTH);
-  if (ret != 0) {
-    return ret > 0;
-  }
-  return timestamp > rhs.timestamp;
-}
-
-bool Row::operator<=(const Row &rhs) const {
-  return *this < rhs || *this == rhs;
-}
-
-bool Row::operator>=(const Row &rhs) const {
-  return *this > rhs || *this == rhs;
-}
-
-Row &Row::operator=(const Row &rhs) {
-  if (this == &rhs) {
-    return *this;
-  }
-  vin = rhs.vin;
-  timestamp = rhs.timestamp;
-  columns = rhs.columns;
-  return *this;
-}
-
-} // namespace LindormContest

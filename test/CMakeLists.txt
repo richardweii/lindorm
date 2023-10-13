@@ -4,16 +4,19 @@ file(GLOB_RECURSE sources_cpp "${PROJECT_SOURCE_DIR}/source/*.cpp")
 add_library(lindorm ${sources_c} ${sources_cpp})
 
 include_directories(${PROJECT_SOURCE_DIR}/test)
-file(GLOB_RECURSE test_cpp "${PROJECT_SOURCE_DIR}/test/*.cpp")
 
-add_executable(my_test test.cpp)
-target_link_libraries(my_test lindorm)
+function(add TEST_FILE)
+  get_filename_component(TEST_NAME ${TEST_FILE} NAME_WE)
+  add_executable(${TEST_NAME} ${TEST_FILE})
+  target_link_libraries(${TEST_NAME} PRIVATE 
+    lindorm
+  )
+  add_test(NAME ${TEST_NAME} COMMAND ${TEST_NAME})
+  message(STATUS "ADD TEST : ${TEST_NAME}")
+endfunction()
 
-add_executable(hard_test hard_test.cpp)
-target_link_libraries(hard_test lindorm)
+FILE(GLOB_RECURSE  test_files *_test.cpp)
 
-add_executable(playground playground.cpp)
-target_link_libraries(playground lindorm)
-
-add_executable(column_usage ColumnValueUsageSample.cpp)
-target_link_libraries(column_usage lindorm)
+foreach(test_file ${test_files})
+  add(${test_file})
+endforeach(test_file)

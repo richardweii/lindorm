@@ -26,11 +26,9 @@
 #include "util/likely.h"
 #include "util/logging.h"
 #include "util/stat.h"
-
 namespace LindormContest {
 
 std::string kTableName = "only_one"; // 目前就一张表，表名预留给复赛
-
 /**
  * This constructor's function signature should not be modified.
  * Our evaluation program will call this constructor.
@@ -136,7 +134,6 @@ int TSDBEngineImpl::connect() {
 
   return 0;
 }
-
 int TSDBEngineImpl::createTable(const std::string& tableName, const Schema& schema) {
   LOG_INFO("start create table %s", tableName.c_str());
   columnsNum = (int32_t)schema.columnTypeMap.size();
@@ -229,7 +226,7 @@ int TSDBEngineImpl::shutdown() {
   return 0;
 }
 
-int TSDBEngineImpl::upsert(const WriteRequest& writeRequest) {
+int TSDBEngineImpl::write(const WriteRequest& writeRequest) {
   RECORD_FETCH_ADD(write_cnt, writeRequest.rows.size());
 
   for (auto& row : writeRequest.rows) {
@@ -278,6 +275,60 @@ int TSDBEngineImpl::executeTimeRangeQuery(const TimeRangeQueryRequest& trReadReq
   return 0;
 }
 
-TSDBEngineImpl::~TSDBEngineImpl() {}
+int TSDBEngineImpl::executeAggregateQuery(const TimeRangeAggregationRequest& aggregationReq,
+                                          std::vector<Row>& aggregationRes) {
+  return 0;
+}
 
+int TSDBEngineImpl::executeDownsampleQuery(const TimeRangeDownsampleRequest& downsampleReq,
+                                           std::vector<Row>& downsampleRes) {
+  return 0;
+}
+
+TSDBEngineImpl::~TSDBEngineImpl() = default;
+
+uint16_t TSDBEngineImpl::read_get_vid(const Vin& vin) {
+  vin2vid_lck.rlock();
+  std::string str(vin.vin, VIN_LENGTH);
+  auto it = vin2vid.find(str);
+  if (it == vin2vid.end()) {
+    vin2vid_lck.unlock();
+    LOG_INFO("查找了一个不存在的vin");
+    return UINT16_MAX;
+  }
+  uint16_t vid = it->second;
+  vin2vid_lck.unlock();
+
+  return vid;
+}
+
+uint16_t TSDBEngineImpl::write_get_vid(const Vin& vin) {
+  uint16_t vid = UINT16_MAX;
+  vin2vid_lck.rlock();
+  std::string str(vin.vin, VIN_LENGTH);
+  auto it = vin2vid.find(str);
+  if (LIKELY(it != vin2vid.cend())) {
+    vin2vid_lck.unlock();
+    vid = it->second;
+  } else {
+    vin2vid_lck.unlock();
+    vin2vid_lck.wlock();
+    it = vin2vid.find(str);
+    if (LIKELY(it == vin2vid.cend())) {
+      vid = vid_cnt_;
+      if (vid % 10000 == 9999) {
+        LOG_INFO("vid %d", vid);
+      }
+      vid2vin.emplace(std::make_pair(vid_cnt_, str));
+      vin2vid.emplace(std::make_pair(str, vid_cnt_++));
+      vin2vid_lck.unlock();
+    } else {
+      vid = it->second;
+      vin2vid_lck.unlock();
+    }
+    LOG_ASSERT(vid != UINT16_MAX, "vid == UINT16_MAX");
+  }
+
+  return vid;
+}
 } // namespace LindormContest

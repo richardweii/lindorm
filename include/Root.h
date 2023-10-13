@@ -21,16 +21,16 @@
 #ifndef LINDORM_TSDB_CONTEST_CPP_ROOT_H
 #define LINDORM_TSDB_CONTEST_CPP_ROOT_H
 
-#include <cmath>
-#include <cstdint>
-#include <cstdio>
-#include <cstring>
-#include <iostream>
-#include <map>
-#include <ostream>
 #include <set>
+#include <vector>
+#include <cstring>
 #include <string>
 #include <utility>
-#include <vector>
+#include <ostream>
+#include <map>
+#include <cstdio>
+#include <iostream>
+#include <cmath>
+#include <cstdint>
 
-#endif // LINDORM_TSDB_CONTEST_CPP_ROOT_H
+#endif //LINDORM_TSDB_CONTEST_CPP_ROOT_H
