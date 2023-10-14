@@ -45,17 +45,17 @@ public:
     return Status::NotSupported;
   };
 
-  virtual off_t GetFileSz() {
+  virtual off_t getFileSz() {
     LOG_ASSERT(false, "Not implemented");
     return -1;
   }
 
-  virtual Status async_write(const char* buf, size_t length) {
+  virtual Status asyncWrite(const char* buf, size_t length) {
     LOG_ASSERT(false, "Not implemented");
     return Status::NotSupported;
   }
 
-  virtual std::string GetFileName() {
+  virtual std::string getFileName() {
     LOG_ASSERT(false, "Not implemented");
     return "";
   }
@@ -100,7 +100,8 @@ public:
 
   static void write_done(io_context_t ctx, struct iocb* iocb, long res, long res2) {}
 
-  Status async_write(const char* buf, size_t length) override {
+  // TODO: async write implementation
+  Status asyncWrite(const char* buf, size_t length) override {
     struct iocb io, *p = &io;
     io_prep_pwrite(&io, fd_, (void*)buf, length, file_sz);
     io_set_callback(&io, write_done);
@@ -123,7 +124,7 @@ public:
     return Status::OK;
   }
 
-  off_t GetFileSz() override { return file_sz; }
+  off_t getFileSz() override { return file_sz; }
 
   virtual ~AppendWriteFile() {
     if (fd_ != -1) {
@@ -132,7 +133,7 @@ public:
     // io_destroy(ctx);
   }
 
-  std::string GetFileName() override { return filename; }
+  std::string getFileName() override { return filename; }
 
 private:
   io_context_t ctx;

@@ -21,6 +21,8 @@ namespace LindormContest {
 
 class ShardMemtable;
 class TSDBEngineImpl : public TSDBEngine {
+  // How many columns is defined in schema for the sole table.
+  static constexpr int kColumnNum = 60;
 public:
     /**
      * This constructor's function signature should not be modified.
@@ -41,36 +43,36 @@ public:
 
     int executeTimeRangeQuery(const TimeRangeQueryRequest &trReadReq, std::vector<Row> &trReadRes) override;
 
+    // 遍历的时候在线处理聚合
     int executeAggregateQuery(const TimeRangeAggregationRequest &aggregationReq, std::vector<Row> &aggregationRes) override;
 
+    // 遍历的时候分桶处理    
     int executeDownsampleQuery(const TimeRangeDownsampleRequest &downsampleReq, std::vector<Row> &downsampleRes) override;
 
     ~TSDBEngineImpl() override;
 private:
 friend class MemTable;
-  void SaveSchema();
-  void LoadSchema();
+  void saveSchema();
+  void loadSchema();
 
-  uint16_t write_get_vid(const Vin& vin);
+  uint16_t getVidForWrite(const Vin& vin);
 
-  uint16_t read_get_vid(const Vin& vin);
+  uint16_t getVidForRead(const Vin& vin);
 
   std::string table_name_;
-  // How many columns is defined in schema for the sole table.
-  int columnsNum;
   // The column's type for each column.
-  ColumnType* columnsType = nullptr;
+  ColumnType* columns_type_ = nullptr;
   // The column's name for each column.
-  std::string* columnsName = nullptr;
+  std::string* columns_name_ = nullptr;
 
   // 用于存储 列名到其在schema中下标的映射
-  std::unordered_map<std::string, int> col2colid;
+  std::unordered_map<std::string, int> column_idx_;
 
   // 用于存储 17个字节的 vin 到 对应的唯一的一个uint16_t的vid的映射关系
-  RWLock vin2vid_lck;
+  RWLock vin2vid_lck_;
   uint16_t vid_cnt_ = 0;
-  std::unordered_map<std::string, uint16_t> vin2vid;
-  std::unordered_map<uint16_t, std::string> vid2vin;
+  std::unordered_map<std::string, uint16_t> vin2vid_;   // TODO:改成Vin
+  std::unordered_map<uint16_t, std::string> vid2vin_;
 
   FileManager* file_manager_;
   ShardMemtable* shard_memtable_;

@@ -26,10 +26,10 @@ namespace LindormContest {
 class MemTable {
 public:
   MemTable(int shard_id, TSDBEngineImpl* engine)
-      : engine(engine), shard_id_(shard_id), columnsNum_(kColumnNum), cnt_(0), file_manager_(engine->file_manager_) {
+      : engine_(engine), shard_id_(shard_id), columnsNum_(kColumnNum), cnt_(0), file_manager_(engine->file_manager_) {
     block_manager_ = new ShardBlockMetaManager(columnsNum_ + kExtraColNum);
     for (int i = 0; i < kVinNumPerShard; i++) {
-      latest_ts_cache[i] = -1;
+      latest_ts_cache_[i] = -1;
     }
   }
 
@@ -39,10 +39,10 @@ public:
       delete columnArrs_[i];
     }
 
-    delete buffer;
+    delete buffer_;
     delete[] columnArrs_;
-    delete vid_col;
-    delete ts_col;
+    delete vid_col_;
+    delete ts_col_;
   }
 
   void Init();
@@ -55,24 +55,24 @@ public:
   void GetLatestRow(uint16_t vid, Row& row, std::vector<int>& colids) {
     int idx = vid2idx(vid);
 
-    if (mem_latest_row_ts[idx] > latest_ts_cache[idx]) {
+    if (mem_latest_row_ts_[idx] > latest_ts_cache_[idx]) {
       // 说明最新的row在内存当中
-      int mem_lat_idx = mem_latest_row_idx[idx];
-      row.timestamp = mem_latest_row_ts[idx];
-      memcpy(row.vin.vin, engine->vid2vin[vid].c_str(), VIN_LENGTH);
+      int mem_lat_idx = mem_latest_row_idx_[idx];
+      row.timestamp = mem_latest_row_ts_[idx];
+      memcpy(row.vin.vin, engine_->vid2vin_[vid].c_str(), VIN_LENGTH);
       for (auto col_id : colids) {
         ColumnValue col_value;
-        auto& col_name = engine->columnsName[col_id];
+        auto& col_name = engine_->columns_name_[col_id];
         columnArrs_[col_id]->Get(mem_lat_idx, col_value);
         row.columns.insert(std::make_pair(col_name, std::move(col_value)));
       }
     } else {
-      row.timestamp = latest_ts_cache[idx];
-      memcpy(row.vin.vin, engine->vid2vin[vid].c_str(), VIN_LENGTH);
+      row.timestamp = latest_ts_cache_[idx];
+      memcpy(row.vin.vin, engine_->vid2vin_[vid].c_str(), VIN_LENGTH);
       for (auto col_id : colids) {
         ColumnValue col_value;
-        auto& col_name = engine->columnsName[col_id];
-        row.columns.insert(std::make_pair(col_name, latest_ts_cols[idx][col_id]));
+        auto& col_name = engine_->columns_name_[col_id];
+        row.columns.insert(std::make_pair(col_name, latest_ts_cols_[idx][col_id]));
       }
     }
 
@@ -89,15 +89,15 @@ public:
     for (int i = 0; i < kVinNumPerShard; i++) {
       min_ts_[i] = INT64_MAX;
       max_ts_[i] = INT64_MIN;
-      mem_latest_row_idx[i] = -1;
-      mem_latest_row_ts[i] = -1;
+      mem_latest_row_idx_[i] = -1;
+      mem_latest_row_ts_[i] = -1;
     }
     cnt_ = 0;
     for (int i = 0; i < columnsNum_; i++) {
       columnArrs_[i]->Reset();
     }
-    vid_col->Reset();
-    ts_col->Reset();
+    vid_col_->Reset();
+    ts_col_->Reset();
   }
 
   void SaveBlockMeta(File* file) { block_manager_->Save(file, shard_id_); }
@@ -127,15 +127,15 @@ private:
 
   void sort();
 
-  TSDBEngineImpl* engine;
+  TSDBEngineImpl* engine_;
   int shard_id_;
 
   int columnsNum_; // How many columns is defined in schema for the sole table.
   // std::string *engine->columnsName; // The column's name for each column.
   ColumnArrWrapper** columnArrs_;
-  VidArrWrapper* vid_col;
-  TsArrWrapper* ts_col;
-  IdxArrWrapper* idx_col;
+  VidArrWrapper* vid_col_;
+  TsArrWrapper* ts_col_;
+  IdxArrWrapper* idx_col_;
 
   int cnt_; // 记录这个memtable写了多少行了，由于可能没有写满，然后shutdown刷下去了，所以需要记录一下
   int64_t min_ts_[kVinNumPerShard];
@@ -145,14 +145,14 @@ private:
 
   // LatestQueryCache
   // Row latest_row_cache[kVinNumPerShard];
-  ColumnValue latest_ts_cols[kVinNumPerShard][kColumnNum];
-  int64_t latest_ts_cache[kVinNumPerShard];
+  ColumnValue latest_ts_cols_[kVinNumPerShard][kColumnNum];
+  int64_t latest_ts_cache_[kVinNumPerShard];
 
   // mem latest row idx and ts
-  int64_t mem_latest_row_idx[kVinNumPerShard];
-  int64_t mem_latest_row_ts[kVinNumPerShard];
+  int64_t mem_latest_row_idx_[kVinNumPerShard];
+  int64_t mem_latest_row_ts_[kVinNumPerShard];
 
-  AlignedBuffer* buffer;
+  AlignedBuffer* buffer_;
 };
 
 /**
@@ -178,18 +178,16 @@ public:
     int shard_id = Shard(vid);
 
     rwlcks[shard_id].wlock();
-    defer { rwlcks[shard_id].unlock(); };
-
     memtables[shard_id]->Add(row, vid);
+    rwlcks[shard_id].unlock();
   }
 
   void GetLatestRow(uint16_t vid, Row& row, std::vector<int>& colids) {
     int shard_id = Shard(vid);
 
     rwlcks[shard_id].rlock();
-    defer { rwlcks[shard_id].unlock(); };
-
     memtables[shard_id]->GetLatestRow(vid, row, colids);
+    rwlcks[shard_id].unlock();
   }
 
   void GetRowsFromTimeRange(uint64_t vid, int64_t lowerInclusive, int64_t upperExclusive, std::vector<int> colids,
@@ -197,9 +195,8 @@ public:
     int shard_id = Shard(vid);
 
     rwlcks[shard_id].rlock();
-    defer { rwlcks[shard_id].unlock(); };
-
     memtables[shard_id]->GetRowsFromTimeRange(vid, lowerInclusive, upperExclusive, colids, results);
+    rwlcks[shard_id].unlock();
   }
 
   void Flush(int shard_id) { memtables[shard_id]->Flush(true); }

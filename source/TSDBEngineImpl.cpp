@@ -39,7 +39,7 @@ TSDBEngineImpl::TSDBEngineImpl(const std::string& dataDirPath) : TSDBEngine(data
   shard_memtable_ = new ShardMemtable(this);
 }
 
-void TSDBEngineImpl::LoadSchema() {
+void TSDBEngineImpl::loadSchema() {
   LOG_INFO("start Load Schema");
   // Read schema.
   std::ifstream schemaFin;
@@ -49,25 +49,25 @@ void TSDBEngineImpl::LoadSchema() {
     schemaFin.close();
     return;
   }
-
-  schemaFin >> columnsNum;
-  if (columnsNum <= 0) {
-    std::cerr << "Unexpected columns' num: [" << columnsNum << "]" << std::endl;
+  int magic = 0;
+  schemaFin >> magic;
+  if (magic != kColumnNum) {
+    std::cerr << "Unexpected columns' num: [" << magic << "]" << std::endl;
     schemaFin.close();
     throw std::exception();
   }
-  std::cout << "Found pre-written data with columns' num: [" << columnsNum << "]" << std::endl;
+  std::cout << "Found pre-written data with columns' num: [" << kColumnNum << "]" << std::endl;
 
-  columnsType = new ColumnType[columnsNum];
-  columnsName = new std::string[columnsNum];
+  columns_type_ = new ColumnType[kColumnNum];
+  columns_name_ = new std::string[kColumnNum];
 
-  for (int i = 0; i < columnsNum; ++i) {
-    schemaFin >> columnsName[i];
+  for (int i = 0; i < kColumnNum; ++i) {
+    schemaFin >> columns_name_[i];
     int32_t columnTypeInt;
     schemaFin >> columnTypeInt;
-    columnsType[i] = (ColumnType)columnTypeInt;
+    columns_type_[i] = (ColumnType)columnTypeInt;
 
-    col2colid.emplace(columnsName[i], i);
+    column_idx_.emplace(columns_name_[i], i);
   }
   RemoveFile(getDataPath() + "/schema");
   LOG_INFO("Load Schema finished");
@@ -75,11 +75,11 @@ void TSDBEngineImpl::LoadSchema() {
 
 int TSDBEngineImpl::connect() {
   print_memory_usage();
-  LoadSchema();
+  loadSchema();
 
   // load vin2vid
   {
-    vin2vid_lck.wlock();
+    vin2vid_lck_.wlock();
     std::string filename = Vin2vidFileName(dataDirPath, kTableName);
     if (file_manager_->Exist(filename)) {
       LOG_INFO("start load vin2vid");
@@ -92,13 +92,13 @@ int TSDBEngineImpl::connect() {
         file.read(vin, VIN_LENGTH);
         file.read((char*)&vid, sizeof(vid));
         std::string vin_str(vin, VIN_LENGTH);
-        vin2vid.emplace(std::make_pair(vin_str, vid));
-        vid2vin.emplace(std::make_pair(vid, vin_str));
+        vin2vid_.emplace(std::make_pair(vin_str, vid));
+        vid2vin_.emplace(std::make_pair(vid, vin_str));
       }
       LOG_INFO("load vin2vid finished");
       RemoveFile(filename);
     }
-    vin2vid_lck.unlock();
+    vin2vid_lck_.unlock();
   }
 
   table_name_ = kTableName;
@@ -128,7 +128,7 @@ int TSDBEngineImpl::connect() {
   }
   LOG_INFO("load latest row cache finished");
 
-  if (columnsName != nullptr) {
+  if (columns_name_ != nullptr) {
     shard_memtable_->Init();
   }
 
@@ -136,14 +136,14 @@ int TSDBEngineImpl::connect() {
 }
 int TSDBEngineImpl::createTable(const std::string& tableName, const Schema& schema) {
   LOG_INFO("start create table %s", tableName.c_str());
-  columnsNum = (int32_t)schema.columnTypeMap.size();
-  columnsName = new std::string[columnsNum];
-  columnsType = new ColumnType[columnsNum];
+  LOG_ASSERT(kColumnNum == (int32_t)schema.columnTypeMap.size(), "schema.column.num != 60");
+  columns_name_ = new std::string[kColumnNum];
+  columns_type_ = new ColumnType[kColumnNum];
   int i = 0;
   for (auto it = schema.columnTypeMap.cbegin(); it != schema.columnTypeMap.cend(); ++it) {
-    col2colid.emplace(it->first, i);
-    columnsName[i] = it->first;
-    columnsType[i++] = it->second;
+    column_idx_.emplace(it->first, i);
+    columns_name_[i] = it->first;
+    columns_type_[i++] = it->second;
   }
 
   table_name_ = kTableName;
@@ -153,16 +153,16 @@ int TSDBEngineImpl::createTable(const std::string& tableName, const Schema& sche
   return 0;
 }
 
-void TSDBEngineImpl::SaveSchema() {
+void TSDBEngineImpl::saveSchema() {
   // Persist the schema.
-  if (columnsNum > 0) {
+  if (kColumnNum > 0) {
     std::ofstream schemaFout;
     schemaFout.open(getDataPath() + "/schema", std::ios::out);
-    schemaFout << columnsNum;
+    schemaFout << kColumnNum;
     schemaFout << " ";
-    for (int i = 0; i < columnsNum; ++i) {
-      schemaFout << columnsName[i] << " ";
-      schemaFout << (int32_t)columnsType[i] << " ";
+    for (int i = 0; i < kColumnNum; ++i) {
+      schemaFout << columns_name_[i] << " ";
+      schemaFout << (int32_t)columns_type_[i] << " ";
     }
     schemaFout.close();
   }
@@ -174,14 +174,14 @@ int TSDBEngineImpl::shutdown() {
   // No mutex is fetched by assumptions.
 
   // save schema
-  SaveSchema();
+  saveSchema();
 
   // flush memtable
   for (int i = 0; i < kShardNum; i++) {
     shard_memtable_->Flush(i);
   }
 
-  print_summary(columnsType, columnsName);
+  print_summary(columns_type_, columns_name_);
   print_memory_usage();
 
   // save block meta
@@ -200,25 +200,25 @@ int TSDBEngineImpl::shutdown() {
 
   // save vin2vid
   {
-    vin2vid_lck.wlock();
+    vin2vid_lck_.wlock();
     std::string filename = Vin2vidFileName(dataDirPath, kTableName);
     File* file = file_manager_->Open(filename, NORMAL_FLAG);
-    int num = vin2vid.size();
+    int num = vin2vid_.size();
     file->write((char*)&num, sizeof(num));
-    for (auto& pair : vin2vid) {
+    for (auto& pair : vin2vid_) {
       LOG_ASSERT(pair.first.size() == VIN_LENGTH, "size = %zu", pair.first.size());
       file->write(pair.first.c_str(), VIN_LENGTH);
       file->write((char*)&pair.second, sizeof(pair.second));
     }
-    vin2vid_lck.unlock();
+    vin2vid_lck_.unlock();
   }
 
-  if (columnsType != nullptr) {
-    delete[] columnsType;
+  if (columns_type_ != nullptr) {
+    delete[] columns_type_;
   }
 
-  if (columnsName != nullptr) {
-    delete[] columnsName;
+  if (columns_name_ != nullptr) {
+    delete[] columns_name_;
   }
 
   delete file_manager_;
@@ -230,7 +230,7 @@ int TSDBEngineImpl::write(const WriteRequest& writeRequest) {
   RECORD_FETCH_ADD(write_cnt, writeRequest.rows.size());
 
   for (auto& row : writeRequest.rows) {
-    uint16_t vid = write_get_vid(row.vin);
+    uint16_t vid = getVidForWrite(row.vin);
     LOG_ASSERT(vid != UINT16_MAX, "error");
     shard_memtable_->Add(row, vid);
   }
@@ -242,11 +242,11 @@ int TSDBEngineImpl::executeLatestQuery(const LatestQueryRequest& pReadReq, std::
   RECORD_FETCH_ADD(latest_query_cnt, pReadReq.vins.size());
   std::vector<int> colids;
   for (auto& col_name : pReadReq.requestedColumns) {
-    colids.emplace_back(col2colid[col_name]);
+    colids.emplace_back(column_idx_[col_name]);
   }
 
   for (const auto& vin : pReadReq.vins) {
-    uint16_t vid = read_get_vid(vin);
+    uint16_t vid = getVidForRead(vin);
     if (vid == UINT16_MAX) {
       continue;
     }
@@ -263,9 +263,9 @@ int TSDBEngineImpl::executeTimeRangeQuery(const TimeRangeQueryRequest& trReadReq
   RECORD_FETCH_ADD(time_range_query_cnt, 1);
   std::vector<int> colids;
   for (auto& col_name : trReadReq.requestedColumns) {
-    colids.emplace_back(col2colid[col_name]);
+    colids.emplace_back(column_idx_[col_name]);
   }
-  uint16_t vid = read_get_vid(trReadReq.vin);
+  uint16_t vid = getVidForRead(trReadReq.vin);
   if (vid == UINT16_MAX) {
     return 0;
   }
@@ -287,44 +287,46 @@ int TSDBEngineImpl::executeDownsampleQuery(const TimeRangeDownsampleRequest& dow
 
 TSDBEngineImpl::~TSDBEngineImpl() = default;
 
-uint16_t TSDBEngineImpl::read_get_vid(const Vin& vin) {
-  vin2vid_lck.rlock();
+uint16_t TSDBEngineImpl::getVidForRead(const Vin& vin) {
+  vin2vid_lck_.rlock();
   std::string str(vin.vin, VIN_LENGTH);
-  auto it = vin2vid.find(str);
-  if (it == vin2vid.end()) {
-    vin2vid_lck.unlock();
+  auto it = vin2vid_.find(str);
+  if (it == vin2vid_.end()) {
+    vin2vid_lck_.unlock();
     LOG_INFO("查找了一个不存在的vin");
     return UINT16_MAX;
   }
   uint16_t vid = it->second;
-  vin2vid_lck.unlock();
+  vin2vid_lck_.unlock();
 
   return vid;
 }
 
-uint16_t TSDBEngineImpl::write_get_vid(const Vin& vin) {
+uint16_t TSDBEngineImpl::getVidForWrite(const Vin& vin) {
   uint16_t vid = UINT16_MAX;
-  vin2vid_lck.rlock();
+  vin2vid_lck_.rlock();
   std::string str(vin.vin, VIN_LENGTH);
-  auto it = vin2vid.find(str);
-  if (LIKELY(it != vin2vid.cend())) {
-    vin2vid_lck.unlock();
+  auto it = vin2vid_.find(str);
+  if (LIKELY(it != vin2vid_.cend())) {
+    vin2vid_lck_.unlock();
     vid = it->second;
   } else {
-    vin2vid_lck.unlock();
-    vin2vid_lck.wlock();
-    it = vin2vid.find(str);
-    if (LIKELY(it == vin2vid.cend())) {
+    vin2vid_lck_.unlock();
+    vin2vid_lck_.wlock();
+    it = vin2vid_.find(str);
+    if (LIKELY(it == vin2vid_.cend())) {
       vid = vid_cnt_;
+#ifdef ENABLE_STAT
       if (vid % 10000 == 9999) {
         LOG_INFO("vid %d", vid);
       }
-      vid2vin.emplace(std::make_pair(vid_cnt_, str));
-      vin2vid.emplace(std::make_pair(str, vid_cnt_++));
-      vin2vid_lck.unlock();
+#endif
+      vid2vin_.emplace(std::make_pair(vid_cnt_, str));
+      vin2vid_.emplace(std::make_pair(str, vid_cnt_++));
+      vin2vid_lck_.unlock();
     } else {
       vid = it->second;
-      vin2vid_lck.unlock();
+      vin2vid_lck_.unlock();
     }
     LOG_ASSERT(vid != UINT16_MAX, "vid == UINT16_MAX");
   }

@@ -10,12 +10,12 @@
 #include <cassert>
 #include <cstring>
 
-constexpr size_t kBufferSize = 16 * 1024;
+constexpr size_t kBufferSize = 4 * 1024;
 
 // 生成0到255之间的随机整数
 class RandomNumberGenerator {
 public:
-    RandomNumberGenerator() : generator(), distribution(-60, 3600) {}
+    RandomNumberGenerator() : generator(), distribution(-600, 3600) {}
 
     // 生成0到255之间的随机整数
     int GenerateRandomNumber() {
@@ -74,6 +74,9 @@ Buffer *GenerateRawData () {
     for (uint64_t i = 0; i < cnt ;i++) {
         uint_p[i] = rnd.GenerateRandomNumber();
     };
+    // for (uint64_t i = 0; i < cnt ;i++) {
+    //     uint_p[i] = -600 + i;
+    // };
     return buffer;
 }
 

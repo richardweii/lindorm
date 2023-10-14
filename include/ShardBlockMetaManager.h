@@ -42,9 +42,9 @@ class ShardBlockMetaManager {
 public:
   ShardBlockMetaManager(int col_num) : col_num_(col_num) {
     for (int i = 0; i < kShardNum; i++) {
-      head[i] = nullptr;
+      head_[i] = nullptr;
     }
-    memset(block_cnts, 0, sizeof(int) * kShardNum);
+    memset(block_cnts_, 0, sizeof(int) * kShardNum);
   }
 
   BlockMeta* NewVinBlockMeta(int shard_id, int num, int64_t* min_ts, int64_t* max_ts) {
@@ -57,14 +57,14 @@ public:
     }
 
     blk_meta->next = nullptr;
-    block_cnts[shard_id]++;
+    block_cnts_[shard_id]++;
 
-    if (head[shard_id] == nullptr) {
-      head[shard_id] = blk_meta;
+    if (head_[shard_id] == nullptr) {
+      head_[shard_id] = blk_meta;
     } else {
       // 头插法
-      blk_meta->next = head[shard_id];
-      head[shard_id] = blk_meta;
+      blk_meta->next = head_[shard_id];
+      head_[shard_id] = blk_meta;
     }
 
     // 剩下的元数据，返回回去，每个列的Flush函数自己填充，当前的测试流程应该不会出现并发问题
@@ -75,7 +75,7 @@ public:
   void GetVinBlockMetasByTimeRange(uint16_t vid, int64_t min_ts, int64_t max_ts,
                                    OUT std::vector<BlockMeta*>& blk_metas) {
     blk_metas.clear();
-    BlockMeta* p = head[Shard(vid)];
+    BlockMeta* p = head_[Shard(vid)];
     int idx = vid2idx(vid);
     while (p != nullptr) {
       if (p->max_ts[idx] < min_ts || p->min_ts[idx] >= max_ts) {
@@ -83,7 +83,6 @@ public:
         continue;
       }
 
-      // TODO: 目前BlockMeta不会被删除，所以不需要Pin住，如果复赛涉及到BlockMeta的删除，那么可能需要添加Pin的逻辑
       blk_metas.emplace_back(p);
       p = p->next;
     }
@@ -96,10 +95,10 @@ public:
   void Save(File* file, int shard_id) {
     LOG_ASSERT(file != nullptr, "error file");
 
-    int blk_cnt = block_cnts[shard_id];
+    int blk_cnt = block_cnts_[shard_id];
     // block_cnt
     file->write((const char*)&blk_cnt, sizeof(blk_cnt));
-    BlockMeta* p = head[shard_id];
+    BlockMeta* p = head_[shard_id];
     for (int i = 0; i < blk_cnt; i++) {
       LOG_ASSERT(p != nullptr, "p == nullptr");
       // row num
@@ -126,9 +125,9 @@ public:
     // block_cnt
     int blk_cnt;
     file->read((char*)&blk_cnt, sizeof(blk_cnt));
-    block_cnts[shard_id] = 0;
+    block_cnts_[shard_id] = 0;
 
-    LOG_ASSERT(head[shard_id] == nullptr, "head[shard_id] should be nullptr");
+    LOG_ASSERT(head_[shard_id] == nullptr, "head[shard_id] should be nullptr");
     for (int i = 0; i < blk_cnt; i++) {
       int num;
       int64_t min_ts[kVinNumPerShard];
@@ -149,20 +148,20 @@ public:
     for (int shard_id = 0; shard_id < kShardNum; shard_id++) {
       int num = 0;
       BlockMeta* next = nullptr;
-      while (head[shard_id] != nullptr) {
-        next = head[shard_id]->next;
-        delete head[shard_id];
-        head[shard_id] = next;
+      while (head_[shard_id] != nullptr) {
+        next = head_[shard_id]->next;
+        delete head_[shard_id];
+        head_[shard_id] = next;
         num++;
       }
-      LOG_ASSERT(num == block_cnts[shard_id], "num != block_cnt");
+      LOG_ASSERT(num == block_cnts_[shard_id], "num != block_cnt");
     }
   }
 
 private:
-  std::mutex mutex[kShardNum];
-  int block_cnts[kShardNum]; // 一共下刷了多少个block
-  BlockMeta* head[kShardNum];
+  std::mutex mutex_[kShardNum];
+  int block_cnts_[kShardNum]; // 一共下刷了多少个block
+  BlockMeta* head_[kShardNum];
   int col_num_;
 };
 

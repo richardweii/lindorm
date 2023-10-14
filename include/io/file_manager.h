@@ -53,7 +53,6 @@ public:
   }
 
 private:
-  // TODO: 后续自己实现哈希表，细粒度锁
   RWLock rwlock;
   std::unordered_map<std::string, File*> outFiles;
 };
