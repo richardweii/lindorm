@@ -10,9 +10,9 @@
 #include "ShardBlockMetaManager.h"
 #include "common.h"
 #include "compress.h"
-#include "io/file_manager.h"
+#include "io/aligned_buffer.h"
+#include "io/io_manager.h"
 #include "struct/ColumnValue.h"
-#include "util/aligned_buffer.h"
 #include "util/logging.h"
 #include "util/stat.h"
 
@@ -24,23 +24,7 @@ namespace LindormContest {
 template <typename T>
 class ColumnArr {
 public:
-  ColumnArr(int col_id, ColumnType type) : col_id_(col_id), type_(type) {
-    // switch (type) {
-    //   case COLUMN_TYPE_STRING:
-    //     LOG_ASSERT(false, "should not run here");
-    //     break;
-    //   case COLUMN_TYPE_INTEGER: {
-    //     max = (T) INT64_MIN;
-    //     break;
-    //   }
-    //   case COLUMN_TYPE_DOUBLE_FLOAT: {
-    //     max = (T) -999999.0;
-    //     break;
-    //   }
-    //   case COLUMN_TYPE_UNINITIALIZED:
-    //     break;
-    // }
-  }
+  ColumnArr(int col_id, ColumnType type) : col_id_(col_id), type_(type) {}
   virtual ~ColumnArr() {}
 
   void Add(const ColumnValue& col, int idx) {
@@ -52,18 +36,12 @@ public:
         int val;
         col.getIntegerValue(val);
         data_[idx] = (T)val;
-        // if (val > max) {
-        //   max = val;
-        // }
         break;
       }
       case COLUMN_TYPE_DOUBLE_FLOAT: {
         double val;
         col.getDoubleFloatValue(val);
         data_[idx] = (T)val;
-        // if (val > max) {
-        //   max = val;
-        // }
         break;
       }
       case COLUMN_TYPE_UNINITIALIZED:
@@ -72,14 +50,14 @@ public:
   }
 
   // 元数据直接写到内存，内存里面的元数据在shutdown的时候会持久化的
-  void Flush(AlignedBuffer* buffer, int cnt, BlockMeta* meta) {
+  void Flush(AlignedWriteBuffer* buffer, int cnt, BlockMeta* meta) {
     uint64_t offset;
     uint64_t input_sz = cnt * sizeof(T);
     uint64_t compress_buf_sz = max_dest_size_func(input_sz);
     char compress_buf[compress_buf_sz];
     uint64_t compress_sz = compress_func((const char*)data_, input_sz, compress_buf, compress_buf_sz);
 
-    buffer->Add(compress_buf, compress_sz, offset);
+    buffer->write(compress_buf, compress_sz, offset);
 
     meta->offset[col_id_] = offset;
     meta->origin_sz[col_id_] = input_sz;
@@ -88,7 +66,8 @@ public:
     RECORD_ARR_FETCH_ADD(compress_szs, col_id_, compress_sz);
   }
 
-  void Read(File* file, AlignedBuffer* buffer, BlockMeta* meta) {
+  // TODO: 不用alignbuffer去读
+  void Read(File* file, AlignedWriteBuffer* buffer, BlockMeta* meta) {
     LOG_ASSERT(meta != nullptr, "error");
     char compress_data_buf[meta->compress_sz[col_id_]];
     uint64_t offset = meta->offset[col_id_];
@@ -96,20 +75,19 @@ public:
     if (buffer->empty()) {
       // 全部在文件里面
       struct stat st;
-      fstat(file->Fd(), &st);
+      fstat(file->fd(), &st);
       LOG_ASSERT(offset + meta->compress_sz[col_id_] <= (uint64_t)st.st_size, "offset %lu read size %lu filesz %lu",
                  offset, meta->compress_sz[col_id_], st.st_size);
-
       file->read(compress_data_buf, meta->compress_sz[col_id_], offset);
+
     } else {
-      if (offset >= (uint64_t)buffer->GetFlushBlkNum() * (uint64_t)kAlignedBufferSize) {
+      if (offset >= (uint64_t)buffer->flushedNum() * (uint64_t)kAlignedBufferSize) {
         // 全部在buffer里面
-        buffer->Read(compress_data_buf, meta->compress_sz[col_id_], offset);
-      } else if (offset + meta->compress_sz[col_id_] <=
-                 (uint64_t)buffer->GetFlushBlkNum() * (uint64_t)kAlignedBufferSize) {
+        buffer->read(compress_data_buf, meta->compress_sz[col_id_], offset);
+      } else if (offset + meta->compress_sz[col_id_] <= (uint64_t)buffer->flushedNum() * (uint64_t)kAlignedBufferSize) {
         // 全部在文件里面
         struct stat st;
-        fstat(file->Fd(), &st);
+        fstat(file->fd(), &st);
         LOG_ASSERT(offset + meta->compress_sz[col_id_] <= (uint64_t)st.st_size, "offset %lu read size %lu filesz %lu",
                    offset, meta->compress_sz[col_id_], st.st_size);
 
@@ -118,9 +96,9 @@ public:
         LOG_ASSERT(!buffer->empty(), "buffer is empty");
         // 一部分在文件里面，一部分在buffer里面
         struct stat st;
-        fstat(file->Fd(), &st);
+        fstat(file->fd(), &st);
         file->read(compress_data_buf, st.st_size - offset, offset);
-        buffer->Read(compress_data_buf + st.st_size - offset, meta->compress_sz[col_id_] - (st.st_size - offset),
+        buffer->read(compress_data_buf + st.st_size - offset, meta->compress_sz[col_id_] - (st.st_size - offset),
                      st.st_size);
       }
     }
@@ -193,7 +171,7 @@ public:
   }
 
   // 元数据直接写到内存，内存里面的元数据在shutdown的时候会持久化的
-  void Flush(AlignedBuffer* buffer, int cnt, BlockMeta* meta) {
+  void Flush(AlignedWriteBuffer* buffer, int cnt, BlockMeta* meta) {
     uint64_t offset;
     uint64_t writesz1 = cnt * sizeof(lens_[0]);
     uint64_t writesz2 = data_.size();
@@ -206,7 +184,7 @@ public:
     uint64_t compress_sz = compress_func((const char*)origin, input_sz, compress_buf, compress_buf_sz);
 
     uint64_t off;
-    buffer->Add(compress_buf, compress_sz, off);
+    buffer->write(compress_buf, compress_sz, off);
 
     delete[] origin;
     delete[] compress_buf;
@@ -218,7 +196,8 @@ public:
     RECORD_ARR_FETCH_ADD(compress_szs, col_id_, compress_sz);
   }
 
-  void Read(File* file, AlignedBuffer* buffer, BlockMeta* meta) {
+  // TODO: 改成不用buffer
+  void Read(File* file, AlignedWriteBuffer* buffer, BlockMeta* meta) {
     LOG_ASSERT(meta != nullptr, "error");
     char* compress_data_buf = new char[meta->compress_sz[col_id_]];
     char* origin_data_buf = new char[meta->origin_sz[col_id_]];
@@ -227,20 +206,19 @@ public:
     if (buffer->empty()) {
       // 全部在文件里面
       struct stat st;
-      fstat(file->Fd(), &st);
+      fstat(file->fd(), &st);
       LOG_ASSERT(offset + meta->compress_sz[col_id_] <= (uint64_t)st.st_size, "offset %lu read size %lu filesz %lu",
                  offset, meta->compress_sz[col_id_], st.st_size);
 
       file->read(compress_data_buf, meta->compress_sz[col_id_], offset);
     } else {
-      if (offset >= (uint64_t)buffer->GetFlushBlkNum() * (uint64_t)kAlignedBufferSize) {
+      if (offset >= (uint64_t)buffer->flushedNum() * (uint64_t)kAlignedBufferSize) {
         // 全部在buffer里面
-        buffer->Read(compress_data_buf, meta->compress_sz[col_id_], offset);
-      } else if (offset + meta->compress_sz[col_id_] <=
-                 (uint64_t)buffer->GetFlushBlkNum() * (uint64_t)kAlignedBufferSize) {
+        buffer->read(compress_data_buf, meta->compress_sz[col_id_], offset);
+      } else if (offset + meta->compress_sz[col_id_] <= (uint64_t)buffer->flushedNum() * (uint64_t)kAlignedBufferSize) {
         // 全部在文件里面
         struct stat st;
-        fstat(file->Fd(), &st);
+        fstat(file->fd(), &st);
         LOG_ASSERT(offset + meta->compress_sz[col_id_] <= (uint64_t)st.st_size, "offset %lu read size %lu filesz %lu",
                    offset, meta->compress_sz[col_id_], st.st_size);
 
@@ -249,14 +227,15 @@ public:
         LOG_ASSERT(!buffer->empty(), "buffer is empty");
         // 一部分在文件里面，一部分在buffer里面
         struct stat st;
-        fstat(file->Fd(), &st);
+        fstat(file->fd(), &st);
         file->read(compress_data_buf, st.st_size - offset, offset);
-        buffer->Read(compress_data_buf + st.st_size - offset, meta->compress_sz[col_id_] - (st.st_size - offset),
+        buffer->read(compress_data_buf + st.st_size - offset, meta->compress_sz[col_id_] - (st.st_size - offset),
                      st.st_size);
       }
     }
 
-    auto ret = decompress_func(compress_data_buf, origin_data_buf, meta->compress_sz[col_id_], meta->origin_sz[col_id_]);
+    auto ret =
+      decompress_func(compress_data_buf, origin_data_buf, meta->compress_sz[col_id_], meta->origin_sz[col_id_]);
     LOG_ASSERT(ret == (int)meta->origin_sz[col_id_], "uncompress error");
 
     memcpy(lens_, origin_data_buf, sizeof(lens_[0]) * (meta->num));
@@ -266,7 +245,7 @@ public:
     offset = 0;
     for (int i = 0; i < meta->num; i++) {
       offset += lens_[i];
-      offsets_[i+1] = offset;
+      offsets_[i + 1] = offset;
     }
 
     delete[] compress_data_buf;
@@ -308,9 +287,9 @@ public:
 
   virtual void Add(const ColumnValue& col, int idx) = 0;
 
-  virtual void Flush(AlignedBuffer* buffer, int cnt, BlockMeta* meta) = 0;
+  virtual void Flush(AlignedWriteBuffer* buffer, int cnt, BlockMeta* meta) = 0;
 
-  virtual void Read(File* file, AlignedBuffer* buffer, BlockMeta* meta) = 0;
+  virtual void Read(File* file, AlignedWriteBuffer* buffer, BlockMeta* meta) = 0;
 
   virtual void Get(int idx, ColumnValue& value) = 0;
 
@@ -329,9 +308,9 @@ public:
 
   void Add(const ColumnValue& col, int idx) override { arr->Add(col, idx); }
 
-  void Flush(AlignedBuffer* buffer, int cnt, BlockMeta* meta) override { arr->Flush(buffer, cnt, meta); }
+  void Flush(AlignedWriteBuffer* buffer, int cnt, BlockMeta* meta) override { arr->Flush(buffer, cnt, meta); }
 
-  void Read(File* file, AlignedBuffer* buffer, BlockMeta* meta) override { arr->Read(file, buffer, meta); }
+  void Read(File* file, AlignedWriteBuffer* buffer, BlockMeta* meta) override { arr->Read(file, buffer, meta); }
 
   void Get(int idx, ColumnValue& value) override { arr->Get(idx, value); }
 
@@ -353,9 +332,9 @@ public:
 
   void Add(const ColumnValue& col, int idx) override { arr->Add(col, idx); }
 
-  void Flush(AlignedBuffer* buffer, int cnt, BlockMeta* meta) override { arr->Flush(buffer, cnt, meta); }
+  void Flush(AlignedWriteBuffer* buffer, int cnt, BlockMeta* meta) override { arr->Flush(buffer, cnt, meta); }
 
-  void Read(File* file, AlignedBuffer* buffer, BlockMeta* meta) override { arr->Read(file, buffer, meta); }
+  void Read(File* file, AlignedWriteBuffer* buffer, BlockMeta* meta) override { arr->Read(file, buffer, meta); }
 
   void Get(int idx, ColumnValue& value) override { arr->Get(idx, value); }
 
@@ -377,9 +356,9 @@ public:
 
   void Add(const ColumnValue& col, int idx) override { arr->Add(col, idx); }
 
-  void Flush(AlignedBuffer* buffer, int cnt, BlockMeta* meta) override { arr->Flush(buffer, cnt, meta); }
+  void Flush(AlignedWriteBuffer* buffer, int cnt, BlockMeta* meta) override { arr->Flush(buffer, cnt, meta); }
 
-  void Read(File* file, AlignedBuffer* buffer, BlockMeta* meta) override { arr->Read(file, buffer, meta); }
+  void Read(File* file, AlignedWriteBuffer* buffer, BlockMeta* meta) override { arr->Read(file, buffer, meta); }
 
   void Get(int idx, ColumnValue& value) override { arr->Get(idx, value); }
 
@@ -404,9 +383,9 @@ public:
 
   void Add(const ColumnValue& col, int idx) override { arr->Add(col, idx); }
 
-  void Flush(AlignedBuffer* buffer, int cnt, BlockMeta* meta) override { arr->Flush(buffer, cnt, meta); }
+  void Flush(AlignedWriteBuffer* buffer, int cnt, BlockMeta* meta) override { arr->Flush(buffer, cnt, meta); }
 
-  void Read(File* file, AlignedBuffer* buffer, BlockMeta* meta) override { arr->Read(file, buffer, meta); }
+  void Read(File* file, AlignedWriteBuffer* buffer, BlockMeta* meta) override { arr->Read(file, buffer, meta); }
 
   void Get(int idx, ColumnValue& value) override { arr->Get(idx, value); }
 
@@ -430,9 +409,9 @@ public:
 
   void Add(const ColumnValue& col, int idx) override { arr->Add(col, idx); }
 
-  void Flush(AlignedBuffer* buffer, int cnt, BlockMeta* meta) override { arr->Flush(buffer, cnt, meta); }
+  void Flush(AlignedWriteBuffer* buffer, int cnt, BlockMeta* meta) override { arr->Flush(buffer, cnt, meta); }
 
-  void Read(File* file, AlignedBuffer* buffer, BlockMeta* meta) override { arr->Read(file, buffer, meta); }
+  void Read(File* file, AlignedWriteBuffer* buffer, BlockMeta* meta) override { arr->Read(file, buffer, meta); }
 
   void Get(int idx, ColumnValue& value) override { arr->Get(idx, value); }
 
@@ -456,9 +435,9 @@ public:
 
   void Add(const ColumnValue& col, int idx) override { arr->Add(col, idx); }
 
-  void Flush(AlignedBuffer* buffer, int cnt, BlockMeta* meta) override { arr->Flush(buffer, cnt, meta); }
+  void Flush(AlignedWriteBuffer* buffer, int cnt, BlockMeta* meta) override { arr->Flush(buffer, cnt, meta); }
 
-  void Read(File* file, AlignedBuffer* buffer, BlockMeta* meta) override { arr->Read(file, buffer, meta); }
+  void Read(File* file, AlignedWriteBuffer* buffer, BlockMeta* meta) override { arr->Read(file, buffer, meta); }
 
   void Get(int idx, ColumnValue& value) override { arr->Get(idx, value); }
 

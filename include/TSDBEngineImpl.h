@@ -14,7 +14,7 @@
 
 #include "Hasher.hpp"
 #include "TSDBEngine.hpp"
-#include "io/file_manager.h"
+#include "io/io_manager.h"
 #include "util/rwlock.h"
 
 namespace LindormContest {
@@ -74,7 +74,7 @@ friend class MemTable;
   std::unordered_map<std::string, uint16_t> vin2vid_;   // TODO:改成Vin
   std::unordered_map<uint16_t, std::string> vid2vin_;
 
-  FileManager* file_manager_;
+  IOManager* io_manager_;
   ShardMemtable* shard_memtable_;
 }; // End class TSDBEngineImpl.
 

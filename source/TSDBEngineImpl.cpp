@@ -20,7 +20,7 @@
 #include "common.h"
 #include "filename.h"
 #include "io/file.h"
-#include "io/file_manager.h"
+#include "io/io_manager.h"
 #include "memtable.h"
 #include "struct/Vin.h"
 #include "util/likely.h"
@@ -35,7 +35,7 @@ std::string kTableName = "only_one"; // 目前就一张表，表名预留给复�
  * The function's body can be modified.
  */
 TSDBEngineImpl::TSDBEngineImpl(const std::string& dataDirPath) : TSDBEngine(dataDirPath) {
-  file_manager_ = new FileManager();
+  io_manager_ = new IOManager();
   shard_memtable_ = new ShardMemtable(this);
 }
 
@@ -81,7 +81,7 @@ int TSDBEngineImpl::connect() {
   {
     vin2vid_lck_.wlock();
     std::string filename = Vin2vidFileName(dataDirPath, kTableName);
-    if (file_manager_->Exist(filename)) {
+    if (io_manager_->Exist(filename)) {
       LOG_INFO("start load vin2vid");
       SequentialReadFile file(filename);
       int num;
@@ -107,7 +107,7 @@ int TSDBEngineImpl::connect() {
   LOG_INFO("start load block meta");
   for (int i = 0; i < kShardNum; i++) {
     std::string filename = ShardMetaFileName(dataDirPath, kTableName, i);
-    if (file_manager_->Exist(filename)) {
+    if (io_manager_->Exist(filename)) {
       SequentialReadFile file(filename);
       shard_memtable_->LoadBlockMeta(i, &file);
       // 删除文件
@@ -120,7 +120,7 @@ int TSDBEngineImpl::connect() {
   LOG_INFO("start load latest row cache");
   for (int i = 0; i < kShardNum; i++) {
     std::string filename = LatestRowFileName(dataDirPath, kTableName, i);
-    if (file_manager_->Exist(filename)) {
+    if (io_manager_->Exist(filename)) {
       SequentialReadFile file(filename);
       shard_memtable_->LoadLatestRowCache(i, &file);
       RemoveFile(filename);
@@ -187,14 +187,14 @@ int TSDBEngineImpl::shutdown() {
   // save block meta
   for (int i = 0; i < kShardNum; i++) {
     std::string filename = ShardMetaFileName(dataDirPath, kTableName, i);
-    File* file = file_manager_->Open(filename, NORMAL_FLAG);
+    File* file = io_manager_->Open(filename, NORMAL_FLAG);
     shard_memtable_->SaveBlockMeta(i, file);
   }
 
   // save latest row cache
   for (int i = 0; i < kShardNum; i++) {
     std::string filename = LatestRowFileName(dataDirPath, kTableName, i);
-    File* file = file_manager_->Open(filename, NORMAL_FLAG);
+    File* file = io_manager_->Open(filename, NORMAL_FLAG);
     shard_memtable_->SaveLatestRowCache(i, file);
   }
 
@@ -202,7 +202,7 @@ int TSDBEngineImpl::shutdown() {
   {
     vin2vid_lck_.wlock();
     std::string filename = Vin2vidFileName(dataDirPath, kTableName);
-    File* file = file_manager_->Open(filename, NORMAL_FLAG);
+    File* file = io_manager_->Open(filename, NORMAL_FLAG);
     int num = vin2vid_.size();
     file->write((char*)&num, sizeof(num));
     for (auto& pair : vin2vid_) {
@@ -221,7 +221,7 @@ int TSDBEngineImpl::shutdown() {
     delete[] columns_name_;
   }
 
-  delete file_manager_;
+  delete io_manager_;
   delete shard_memtable_;
   return 0;
 }

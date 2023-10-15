@@ -49,9 +49,9 @@ void MemTable::Init() {
   }
 
   std::string file_name = ShardDataFileName(engine_->dataDirPath, engine_->table_name_, shard_id_);
-  File* file = file_manager_->Open(file_name, LIBAIO_FLAG);
-  // File* file = file_manager_->Open(file_name, NORMAL_FLAG);
-  buffer_ = new AlignedBuffer(file);
+  File* file = io_manager_->Open(file_name, LIBAIO_FLAG);
+  // File* file = io_manager_->Open(file_name, NORMAL_FLAG);
+  buffer_ = new AlignedWriteBuffer(file);
 }
 
 void MemTable::Add(const Row& row, uint16_t vid) {
@@ -128,7 +128,7 @@ void MemTable::Flush(bool shutdown) {
   idx_col_->Flush(buffer_, cnt_, meta);
 
   if (shutdown) {
-    buffer_->Flush();
+    buffer_->flush();
   }
 
   Reset();

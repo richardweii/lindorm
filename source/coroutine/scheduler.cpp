@@ -25,7 +25,7 @@ Scheduler::~Scheduler() { delete[] wakeup_buf_; }
 
 void Scheduler::scheduling() {
   scheduler = this;
-  while (!stop) {
+  while (!(stop && runnable_list_.empty() && waiting_list_.empty() && queue_sz_ == 0)) {
     if (UNLIKELY(runnable_list_.empty())) {
       // do none-block polling work
       if (LIKELY(polling_ != nullptr)) {
@@ -35,7 +35,7 @@ void Scheduler::scheduling() {
     wakeup();
     dispatch();
     if (UNLIKELY(runnable_list_.empty())) {
-      // do batch flush work
+      std::this_thread::yield();
       continue;
     }
     current_ = runnable_list_.front();
@@ -68,6 +68,7 @@ void Scheduler::dispatch() {
     coro->task_ = std::move(task_buf_[task_pos_]);
     coro->state_ = CoroutineState::RUNNABLE;
     task_pos_++;
+    queue_sz_--;
     idle_list_.erase(iter++);
     runnable_list_.push_back(coro);
   }

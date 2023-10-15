@@ -11,12 +11,12 @@
 #include "common.h"
 #include "filename.h"
 #include "io/file.h"
-#include "io/file_manager.h"
+#include "io/io_manager.h"
 #include "status.h"
 #include "struct/ColumnValue.h"
 #include "struct/Row.h"
 #include "struct/Vin.h"
-#include "util/aligned_buffer.h"
+#include "io/aligned_buffer.h"
 #include "util/defer.h"
 #include "util/logging.h"
 #include "util/rwlock.h"
@@ -26,7 +26,7 @@ namespace LindormContest {
 class MemTable {
 public:
   MemTable(int shard_id, TSDBEngineImpl* engine)
-      : engine_(engine), shard_id_(shard_id), columnsNum_(kColumnNum), cnt_(0), file_manager_(engine->file_manager_) {
+      : engine_(engine), shard_id_(shard_id), columnsNum_(kColumnNum), cnt_(0), io_manager_(engine->io_manager_) {
     block_manager_ = new ShardBlockMetaManager(columnsNum_ + kExtraColNum);
     for (int i = 0; i < kVinNumPerShard; i++) {
       latest_ts_cache_[i] = -1;
@@ -140,7 +140,7 @@ private:
   int cnt_; // 记录这个memtable写了多少行了，由于可能没有写满，然后shutdown刷下去了，所以需要记录一下
   int64_t min_ts_[kVinNumPerShard];
   int64_t max_ts_[kVinNumPerShard];
-  FileManager* file_manager_;
+  IOManager* io_manager_;
   ShardBlockMetaManager* block_manager_;
 
   // LatestQueryCache
@@ -152,7 +152,7 @@ private:
   int64_t mem_latest_row_idx_[kVinNumPerShard];
   int64_t mem_latest_row_ts_[kVinNumPerShard];
 
-  AlignedBuffer* buffer_;
+  AlignedWriteBuffer* buffer_;
 };
 
 /**
