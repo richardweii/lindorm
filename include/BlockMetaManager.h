@@ -12,7 +12,7 @@
 
 namespace LindormContest {
 
-typedef struct BlockMeta {
+struct BlockMeta {
   BlockMeta* next;
   int num; // 一共写了多少行数据
   int64_t min_ts[kVinNumPerShard];
@@ -22,10 +22,10 @@ typedef struct BlockMeta {
   uint64_t* origin_sz;
   uint64_t* offset;
 
-  BlockMeta(int col_num) {
-    compress_sz = new uint64_t[col_num];
-    origin_sz = new uint64_t[col_num];
-    offset = new uint64_t[col_num];
+  BlockMeta() {
+    compress_sz = new uint64_t[kColumnNum + kExtraColNum];
+    origin_sz = new uint64_t[kColumnNum + kExtraColNum];
+    offset = new uint64_t[kColumnNum + kExtraColNum];
   }
 
   ~BlockMeta() {
@@ -33,22 +33,16 @@ typedef struct BlockMeta {
     delete[] origin_sz;
     delete[] offset;
   }
-} BlockMeta;
+};
 
 /**
  * 每一个Shard都有一个元数据管理器，存储了每一个Shard下刷的所有的Block的元数据信息
  */
-class ShardBlockMetaManager {
+// TODO: 重构，把kShardNum 去掉
+class BlockMetaManager {
 public:
-  ShardBlockMetaManager(int col_num) : col_num_(col_num) {
-    for (int i = 0; i < kShardNum; i++) {
-      head_[i] = nullptr;
-    }
-    memset(block_cnts_, 0, sizeof(int) * kShardNum);
-  }
-
-  BlockMeta* NewVinBlockMeta(int shard_id, int num, int64_t* min_ts, int64_t* max_ts) {
-    BlockMeta* blk_meta = new BlockMeta(col_num_);
+  BlockMeta* NewVinBlockMeta(int num, int64_t* min_ts, int64_t* max_ts) {
+    BlockMeta* blk_meta = new BlockMeta();
     LOG_ASSERT(blk_meta != nullptr, "blk_meta == nullptr");
     blk_meta->num = num;
     for (int i = 0; i < kVinNumPerShard; i++) {
@@ -57,14 +51,14 @@ public:
     }
 
     blk_meta->next = nullptr;
-    block_cnts_[shard_id]++;
+    block_cnts_++;
 
-    if (head_[shard_id] == nullptr) {
-      head_[shard_id] = blk_meta;
+    if (head_ == nullptr) {
+      head_ = blk_meta;
     } else {
       // 头插法
-      blk_meta->next = head_[shard_id];
-      head_[shard_id] = blk_meta;
+      blk_meta->next = head_;
+      head_ = blk_meta;
     }
 
     // 剩下的元数据，返回回去，每个列的Flush函数自己填充，当前的测试流程应该不会出现并发问题
@@ -75,8 +69,8 @@ public:
   void GetVinBlockMetasByTimeRange(uint16_t vid, int64_t min_ts, int64_t max_ts,
                                    OUT std::vector<BlockMeta*>& blk_metas) {
     blk_metas.clear();
-    BlockMeta* p = head_[Shard(vid)];
-    int idx = vid2idx(vid);
+    BlockMeta* p = head_;
+    int idx = vid2svid(vid);
     while (p != nullptr) {
       if (p->max_ts[idx] < min_ts || p->min_ts[idx] >= max_ts) {
         p = p->next;
@@ -92,13 +86,13 @@ public:
   // 格式：block_cnt [blk_meta]
   //  blk_meta: row_num min_ts[kVinNumPerShard] max_ts[kVinNumPerShard] compress_sz[col_num] origin_sz[col_num]
   //  offset[col_num]
-  void Save(File* file, int shard_id) {
+  void Save(File* file) {
     LOG_ASSERT(file != nullptr, "error file");
 
-    int blk_cnt = block_cnts_[shard_id];
+    int blk_cnt = block_cnts_;
     // block_cnt
     file->write((const char*)&blk_cnt, sizeof(blk_cnt));
-    BlockMeta* p = head_[shard_id];
+    BlockMeta* p = head_;
     for (int i = 0; i < blk_cnt; i++) {
       LOG_ASSERT(p != nullptr, "p == nullptr");
       // row num
@@ -108,26 +102,26 @@ public:
       // max_ts
       file->write((const char*)p->max_ts, sizeof(p->max_ts[0]) * kVinNumPerShard);
       // compress_sz
-      file->write((const char*)p->compress_sz, sizeof(p->compress_sz[0]) * col_num_);
+      file->write((const char*)p->compress_sz, sizeof(p->compress_sz[0]) * (kColumnNum + kExtraColNum));
       // origin_sz
-      file->write((const char*)p->origin_sz, sizeof(p->origin_sz[0]) * col_num_);
+      file->write((const char*)p->origin_sz, sizeof(p->origin_sz[0]) * (kColumnNum + kExtraColNum));
       // offset
-      file->write((const char*)p->offset, sizeof(p->offset[0]) * col_num_);
+      file->write((const char*)p->offset, sizeof(p->offset[0]) * (kColumnNum + kExtraColNum));
       p = p->next;
     }
     LOG_ASSERT(p == nullptr, "p should be equal nullptr");
   }
 
   // connect的时候，从文件读取，重新构建VinBlockMetaManager
-  void Load(File* file, int shard_id) {
+  void Load(File* file) {
     LOG_ASSERT(file != nullptr, "error file");
 
     // block_cnt
     int blk_cnt;
     file->read((char*)&blk_cnt, sizeof(blk_cnt));
-    block_cnts_[shard_id] = 0;
+    block_cnts_ = 0;
 
-    LOG_ASSERT(head_[shard_id] == nullptr, "head[shard_id] should be nullptr");
+    LOG_ASSERT(head_ == nullptr, "head should be nullptr");
     for (int i = 0; i < blk_cnt; i++) {
       int num;
       int64_t min_ts[kVinNumPerShard];
@@ -136,33 +130,31 @@ public:
       file->read((char*)min_ts, sizeof(min_ts[0]) * kVinNumPerShard);
       file->read((char*)max_ts, sizeof(max_ts[0]) * kVinNumPerShard);
 
-      auto* p = NewVinBlockMeta(shard_id, num, min_ts, max_ts);
+      auto* p = NewVinBlockMeta(num, min_ts, max_ts);
 
-      file->read((char*)p->compress_sz, sizeof(p->compress_sz[0]) * col_num_);
-      file->read((char*)p->origin_sz, sizeof(p->origin_sz[0]) * col_num_);
-      file->read((char*)p->offset, sizeof(p->offset[0]) * col_num_);
+      file->read((char*)p->compress_sz, sizeof(p->compress_sz[0]) * (kColumnNum + kExtraColNum));
+      file->read((char*)p->origin_sz, sizeof(p->origin_sz[0]) * (kColumnNum + kExtraColNum));
+      file->read((char*)p->offset, sizeof(p->offset[0]) * (kColumnNum + kExtraColNum));
     }
   }
 
-  virtual ~ShardBlockMetaManager() {
+  virtual ~BlockMetaManager() {
     for (int shard_id = 0; shard_id < kShardNum; shard_id++) {
       int num = 0;
       BlockMeta* next = nullptr;
-      while (head_[shard_id] != nullptr) {
-        next = head_[shard_id]->next;
-        delete head_[shard_id];
-        head_[shard_id] = next;
+      while (head_ != nullptr) {
+        next = head_->next;
+        delete head_;
+        head_ = next;
         num++;
       }
-      LOG_ASSERT(num == block_cnts_[shard_id], "num != block_cnt");
+      LOG_ASSERT(num == block_cnts_, "num != block_cnt");
     }
   }
 
 private:
-  std::mutex mutex_[kShardNum];
-  int block_cnts_[kShardNum]; // 一共下刷了多少个block
-  BlockMeta* head_[kShardNum];
-  int col_num_;
+  int block_cnts_{0}; // 一共下刷了多少个block
+  BlockMeta* head_{nullptr};
 };
 
 } // namespace LindormContest

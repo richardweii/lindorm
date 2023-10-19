@@ -18,19 +18,13 @@ namespace LindormContest {
  */
 class AlignedWriteBuffer {
 public:
-  AlignedWriteBuffer(File* file) : file_(file) {
-    // posix_memalign(&buffer_, 512, kWriteBufferSize);
-    // posix_memalign(&flush_buffer_, 512, kWriteBufferSize);
-  }
+  AlignedWriteBuffer(File* file) : file_(file) { posix_memalign(&buffer_, 512, kWriteBufferSize); }
 
-  AlignedWriteBuffer(File* file, size_t buffer_size) : file_(file) {
-    buffer_ = BuddyThreadHeap::get_instance()->alloc(buffer_size);
-  }
+  AlignedWriteBuffer(File* file, size_t buffer_size) : file_(file) { posix_memalign(&buffer_, 512, buffer_size); }
 
   virtual ~AlignedWriteBuffer() {
     if (buffer_ != nullptr) {
-      BuddyThreadHeap::get_instance()->free_local(buffer_);
-      buffer_ = nullptr;
+      free(buffer_);
     }
   }
 
@@ -61,7 +55,7 @@ public:
       len -= copy_len;
     }
   }
-  
+
   // 写阶段需要从未下刷完毕的buffer中读取数据
   void read(char* res_buf, size_t length, off_t off) {
     LOG_ASSERT((uint64_t)(off % kWriteBufferSize) + (uint64_t)length <= (uint64_t)offset_,
@@ -77,7 +71,7 @@ public:
 
   bool empty() { return offset_ == 0; }
 
-  const int flushedNum() const { return flush_blk_num_; }
+  const size_t FlushedSz() const { return flush_blk_num_ * kWriteBufferSize; }
 
 private:
   void* buffer_ = nullptr;

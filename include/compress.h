@@ -8,8 +8,8 @@
 namespace LindormContest {
 
 typedef int MaxDestSizeFunc(int);
-typedef uint64_t CompressFunc(const char*, uint64_t, char*, uint64_t);
-typedef int DeCompressFunc(const char*, char*, int, int);
+typedef uint64_t CompressFunc(const char* raw_data, uint64_t raw_data_len, char* dest, uint64_t dest_len);
+typedef int DeCompressFunc(const char* compressed, char* dest, int compressed_sz, int dest_cap);
 /**
  * 各种压缩算法的实现
  */

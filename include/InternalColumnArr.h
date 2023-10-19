@@ -7,7 +7,7 @@
 #include <new>
 #include <string>
 
-#include "ShardBlockMetaManager.h"
+#include "BlockMetaManager.h"
 #include "common.h"
 #include "compress.h"
 #include "io/aligned_buffer.h"
@@ -54,10 +54,12 @@ public:
     uint64_t offset;
     uint64_t input_sz = cnt * sizeof(T);
     uint64_t compress_buf_sz = max_dest_size_func(input_sz);
-    char compress_buf[compress_buf_sz];
+
+    auto compress_buf = reinterpret_cast<char*>(BuddyThreadHeap::get_instance()->alloc(compress_buf_sz));
     uint64_t compress_sz = compress_func((const char*)data_, input_sz, compress_buf, compress_buf_sz);
 
     buffer->write(compress_buf, compress_sz, offset);
+    BuddyThreadHeap::get_instance()->free_local(compress_buf);
 
     meta->offset[col_id_] = offset;
     meta->origin_sz[col_id_] = input_sz;
@@ -66,45 +68,48 @@ public:
     RECORD_ARR_FETCH_ADD(compress_szs, col_id_, compress_sz);
   }
 
-  // TODO: 不用alignbuffer去读
   void Read(File* file, AlignedWriteBuffer* buffer, BlockMeta* meta) {
     LOG_ASSERT(meta != nullptr, "error");
-    char compress_data_buf[meta->compress_sz[col_id_]];
-    uint64_t offset = meta->offset[col_id_];
 
-    if (buffer->empty()) {
+    // buf的长度按512字节对齐
+    size_t compressed_buf_sz = roundup512(meta->compress_sz[col_id_]);
+    auto buf = reinterpret_cast<char*>(BuddyThreadHeap::get_instance()->alloc(compressed_buf_sz));
+    char* compressed_data = buf;
+
+    uint64_t offset = meta->offset[col_id_];
+    size_t compress_sz = meta->compress_sz[col_id_];
+
+    if (LIKELY(buffer == nullptr) || buffer->empty() || offset + compress_sz <= (uint64_t)buffer->FlushedSz()) {
       // 全部在文件里面
       struct stat st;
       fstat(file->fd(), &st);
-      LOG_ASSERT(offset + meta->compress_sz[col_id_] <= (uint64_t)st.st_size, "offset %lu read size %lu filesz %lu",
-                 offset, meta->compress_sz[col_id_], st.st_size);
-      file->read(compress_data_buf, meta->compress_sz[col_id_], offset);
-
+      LOG_ASSERT(offset + compress_sz <= (uint64_t)st.st_size, "offset %lu read size %lu filesz %lu", offset,
+                 compress_sz, st.st_size);
+      auto read_off = rounddown512(offset);
+      file->read(compressed_data, compressed_buf_sz, read_off);
+      compressed_data += (offset - read_off); // 偏移修正
     } else {
-      if (offset >= (uint64_t)buffer->flushedNum() * (uint64_t)kAlignedBufferSize) {
+      if (offset >= (uint64_t)buffer->FlushedSz() * (uint64_t)kWriteBufferSize) {
         // 全部在buffer里面
-        buffer->read(compress_data_buf, meta->compress_sz[col_id_], offset);
-      } else if (offset + meta->compress_sz[col_id_] <= (uint64_t)buffer->flushedNum() * (uint64_t)kAlignedBufferSize) {
-        // 全部在文件里面
-        struct stat st;
-        fstat(file->fd(), &st);
-        LOG_ASSERT(offset + meta->compress_sz[col_id_] <= (uint64_t)st.st_size, "offset %lu read size %lu filesz %lu",
-                   offset, meta->compress_sz[col_id_], st.st_size);
-
-        file->read(compress_data_buf, meta->compress_sz[col_id_], offset);
+        buffer->read(compressed_data, compress_sz, offset);
       } else {
         LOG_ASSERT(!buffer->empty(), "buffer is empty");
         // 一部分在文件里面，一部分在buffer里面
         struct stat st;
         fstat(file->fd(), &st);
-        file->read(compress_data_buf, st.st_size - offset, offset);
-        buffer->read(compress_data_buf + st.st_size - offset, meta->compress_sz[col_id_] - (st.st_size - offset),
-                     st.st_size);
+        // 先从文件读取
+        auto read_off = rounddown512(offset);
+        file->read(compressed_data, roundup512(st.st_size - offset), read_off);
+        compressed_data += (read_off - offset); // 偏移修正
+
+        // 再从缓冲区读取
+        buffer->read(compressed_data + st.st_size - offset, compress_sz - (st.st_size - offset), st.st_size);
       }
     }
 
-    auto ret = decompress_func(compress_data_buf, (char*)data_, meta->compress_sz[col_id_], meta->origin_sz[col_id_]);
+    auto ret = decompress_func(compressed_data, (char*)data_, compress_sz, meta->origin_sz[col_id_]);
     LOG_ASSERT(ret == (int)meta->origin_sz[col_id_], "uncompress error");
+    BuddyThreadHeap::get_instance()->free_local(buf);
   }
 
   void Get(int idx, ColumnValue& value) {
@@ -176,18 +181,18 @@ public:
     uint64_t writesz1 = cnt * sizeof(lens_[0]);
     uint64_t writesz2 = data_.size();
     uint64_t input_sz = writesz1 + writesz2;
-    char* origin = new char[input_sz];
+    char* origin = reinterpret_cast<char*>(BuddyThreadHeap::get_instance()->alloc(input_sz));
     memcpy(origin, lens_, writesz1);
     memcpy(origin + writesz1, data_.c_str(), writesz2);
     uint64_t compress_buf_sz = max_dest_size_func(input_sz);
-    char* compress_buf = new char[compress_buf_sz];
+    char* compress_buf = reinterpret_cast<char*>(BuddyThreadHeap::get_instance()->alloc(compress_buf_sz));
     uint64_t compress_sz = compress_func((const char*)origin, input_sz, compress_buf, compress_buf_sz);
 
     uint64_t off;
     buffer->write(compress_buf, compress_sz, off);
 
-    delete[] origin;
-    delete[] compress_buf;
+    BuddyThreadHeap::get_instance()->free_local(origin);
+    BuddyThreadHeap::get_instance()->free_local(compress_buf);
 
     meta->offset[col_id_] = off;
     meta->origin_sz[col_id_] = input_sz;
@@ -196,51 +201,53 @@ public:
     RECORD_ARR_FETCH_ADD(compress_szs, col_id_, compress_sz);
   }
 
-  // TODO: 改成不用buffer
+  // 可以考虑减少一次拷贝
   void Read(File* file, AlignedWriteBuffer* buffer, BlockMeta* meta) {
     LOG_ASSERT(meta != nullptr, "error");
-    char* compress_data_buf = new char[meta->compress_sz[col_id_]];
-    char* origin_data_buf = new char[meta->origin_sz[col_id_]];
-    uint64_t offset = meta->offset[col_id_];
 
-    if (buffer->empty()) {
+    size_t compress_buf_sz = roundup512(meta->compress_sz[col_id_]);
+    size_t origin_buf_sz = meta->origin_sz[col_id_];
+
+    char* compress_buf = reinterpret_cast<char*>(BuddyThreadHeap::get_instance()->alloc(compress_buf_sz));
+    char* compress_data = compress_buf;
+    char* origin_buf = reinterpret_cast<char*>(BuddyThreadHeap::get_instance()->alloc(origin_buf_sz));
+
+    uint64_t offset = meta->offset[col_id_];
+    size_t compress_sz = meta->compress_sz[col_id_];
+
+    if (LIKELY(buffer == nullptr) || buffer->empty() || offset + compress_sz <= buffer->FlushedSz()) {
       // 全部在文件里面
       struct stat st;
       fstat(file->fd(), &st);
-      LOG_ASSERT(offset + meta->compress_sz[col_id_] <= (uint64_t)st.st_size, "offset %lu read size %lu filesz %lu",
-                 offset, meta->compress_sz[col_id_], st.st_size);
+      LOG_ASSERT(offset + compress_sz <= (uint64_t)st.st_size, "offset %lu read size %lu filesz %lu", offset,
+                 compress_sz, st.st_size);
 
-      file->read(compress_data_buf, meta->compress_sz[col_id_], offset);
+      auto read_off = rounddown512(offset);
+      file->read(compress_data, compress_buf_sz, read_off);
+      compress_data += (offset - read_off); // 偏移修正
     } else {
-      if (offset >= (uint64_t)buffer->flushedNum() * (uint64_t)kAlignedBufferSize) {
+      if (offset >= buffer->FlushedSz()) {
         // 全部在buffer里面
-        buffer->read(compress_data_buf, meta->compress_sz[col_id_], offset);
-      } else if (offset + meta->compress_sz[col_id_] <= (uint64_t)buffer->flushedNum() * (uint64_t)kAlignedBufferSize) {
-        // 全部在文件里面
-        struct stat st;
-        fstat(file->fd(), &st);
-        LOG_ASSERT(offset + meta->compress_sz[col_id_] <= (uint64_t)st.st_size, "offset %lu read size %lu filesz %lu",
-                   offset, meta->compress_sz[col_id_], st.st_size);
-
-        file->read(compress_data_buf, meta->compress_sz[col_id_], offset);
+        buffer->read(compress_data, compress_sz, offset);
       } else {
         LOG_ASSERT(!buffer->empty(), "buffer is empty");
         // 一部分在文件里面，一部分在buffer里面
         struct stat st;
         fstat(file->fd(), &st);
-        file->read(compress_data_buf, st.st_size - offset, offset);
-        buffer->read(compress_data_buf + st.st_size - offset, meta->compress_sz[col_id_] - (st.st_size - offset),
-                     st.st_size);
+        // 先从文件读取
+        auto read_off = rounddown512(offset);
+        file->read(compress_data, roundup512(st.st_size - offset), read_off);
+        compress_data += (offset - read_off);
+        // 再从缓冲区读取
+        buffer->read(compress_data + st.st_size - offset, compress_sz - (st.st_size - offset), st.st_size);
       }
     }
 
-    auto ret =
-      decompress_func(compress_data_buf, origin_data_buf, meta->compress_sz[col_id_], meta->origin_sz[col_id_]);
-    LOG_ASSERT(ret == (int)meta->origin_sz[col_id_], "uncompress error");
+    auto ret = decompress_func(compress_data, origin_buf, compress_sz, origin_buf_sz);
+    LOG_ASSERT(ret == (int)origin_buf_sz, "uncompress error");
 
-    memcpy(lens_, origin_data_buf, sizeof(lens_[0]) * (meta->num));
-    data_ = std::string(origin_data_buf + sizeof(lens_[0]) * (meta->num),
-                        meta->origin_sz[col_id_] - sizeof(lens_[0]) * meta->num);
+    memcpy(lens_, origin_buf, sizeof(lens_[0]) * (meta->num));
+    data_ = std::string(origin_buf + sizeof(lens_[0]) * (meta->num), origin_buf_sz - sizeof(lens_[0]) * meta->num);
 
     offset = 0;
     for (int i = 0; i < meta->num; i++) {
@@ -248,8 +255,8 @@ public:
       offsets_[i + 1] = offset;
     }
 
-    delete[] compress_data_buf;
-    delete[] origin_data_buf;
+    BuddyThreadHeap::get_instance()->free_local(compress_buf);
+    BuddyThreadHeap::get_instance()->free_local(origin_buf);
   }
 
   void Get(int idx, ColumnValue& value) {
@@ -298,6 +305,8 @@ public:
   virtual void Reset() = 0;
 
   virtual int GetColid() = 0;
+
+  virtual size_t TotalSize() = 0;
 };
 
 class IntArrWrapper : public ColumnArrWrapper {
@@ -319,6 +328,8 @@ public:
   void Reset() override { arr->Reset(); }
 
   int GetColid() override { return arr->col_id_; }
+
+  size_t TotalSize() override { return 0; }
 
 private:
   ColumnArr<int>* arr;
@@ -343,6 +354,8 @@ public:
   void Reset() override { arr->Reset(); }
 
   int GetColid() override { return arr->col_id_; }
+
+  size_t TotalSize() override { return 0; }
 
 private:
   ColumnArr<double>* arr;
@@ -371,6 +384,8 @@ public:
 
   int GetColid() override { return arr->col_id_; }
 
+  size_t TotalSize() override { return 0; }
+
 private:
   ColumnArr<std::string>* arr;
 };
@@ -396,6 +411,8 @@ public:
   int GetColid() override { return arr->col_id_; }
 
   uint16_t* GetDataArr() { return arr->data_; }
+
+  size_t TotalSize() override { return 0; }
 
 private:
   ColumnArr<uint16_t>* arr;
@@ -423,6 +440,8 @@ public:
 
   int64_t* GetDataArr() { return arr->data_; }
 
+  size_t TotalSize() override { return 0; }
+
 private:
   ColumnArr<int64_t>* arr;
 };
@@ -448,6 +467,8 @@ public:
   int GetColid() override { return arr->col_id_; }
 
   uint16_t* GetDataArr() { return arr->data_; }
+
+  size_t TotalSize() override { return 0; }
 
 private:
   ColumnArr<uint16_t>* arr;

@@ -26,7 +26,7 @@ MemPool::MemPool(uint64_t chunk_size, void* pool_addr, uint64_t pool_size)
   chunk_num_ = pool_size_ / chunk_size_;
   assert(chunk_num_ <= MEM_POOL_MAX_CHUNK_NUM && ((chunk_num_ & (chunk_num_ - 1)) == 0));
   first_free_id_ = 1;
-  for (int i = 1; i <= chunk_num_; ++i) {
+  for (size_t i = 1; i <= chunk_num_; ++i) {
     if (i == chunk_num_)
       next_chunk_id[i] = 0;
     else
@@ -59,7 +59,7 @@ BuddySystem::BuddySystem(void* chunk_addr) : chunk_addr_(chunk_addr) {
   assert(size_ > 1 && IS_POW_OF_2(size_) && size_ * 2 <= BUDDY_SYSTEM_MAX_NODE_NUM);
 
   size_t node_size = size_ * 2;
-  for (int i = 0; i < size_ * 2 - 1; ++i) {
+  for (size_t i = 0; i < size_ * 2 - 1; ++i) {
     if (IS_POW_OF_2(i + 1)) node_size >>= 1;
     longest_[i] = node_size;
   }

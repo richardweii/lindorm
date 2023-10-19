@@ -22,21 +22,27 @@
 #include "io/file.h"
 #include "io/io_manager.h"
 #include "memtable.h"
+#include "shard.h"
 #include "struct/Vin.h"
 #include "util/likely.h"
 #include "util/logging.h"
 #include "util/stat.h"
-namespace LindormContest {
+#include "util/waitgroup.h"
 
-std::string kTableName = "only_one"; // 目前就一张表，表名预留给复赛
+std::once_flag start_coro;
+
+namespace LindormContest {
 /**
  * This constructor's function signature should not be modified.
  * Our evaluation program will call this constructor.
  * The function's body can be modified.
  */
 TSDBEngineImpl::TSDBEngineImpl(const std::string& dataDirPath) : TSDBEngine(dataDirPath) {
-  io_manager_ = new IOManager();
-  shard_memtable_ = new ShardMemtable(this);
+  io_mgr_ = new IOManager();
+  for (int i = 0; i < kShardNum; i++) {
+    shards_[i] = new ShardImpl(i, this);
+  }
+  coro_pool_ = new CoroutinePool(kWorkerThread, kCoroutinePerThread);
 }
 
 void TSDBEngineImpl::loadSchema() {
@@ -46,6 +52,7 @@ void TSDBEngineImpl::loadSchema() {
   schemaFin.open(getDataPath() + "/schema", std::ios::in);
   if (!schemaFin.is_open() || !schemaFin.good()) {
     std::cout << "Connect new database with empty pre-written data" << std::endl;
+    new_db = true;
     schemaFin.close();
     return;
   }
@@ -66,7 +73,6 @@ void TSDBEngineImpl::loadSchema() {
     int32_t columnTypeInt;
     schemaFin >> columnTypeInt;
     columns_type_[i] = (ColumnType)columnTypeInt;
-
     column_idx_.emplace(columns_name_[i], i);
   }
   RemoveFile(getDataPath() + "/schema");
@@ -77,11 +83,22 @@ int TSDBEngineImpl::connect() {
   print_memory_usage();
   loadSchema();
 
+  // 初始化shard
+  File* shard_file = nullptr;
+  for (int i = 0; i < kShardNum; i++) {
+    if (new_db) {
+      shard_file = io_mgr_->OpenAsyncWriteFile(ShardDataFileName(dataDirPath, kTableName, i));
+    } else {
+      shard_file = io_mgr_->OpenAsyncReadFile(ShardDataFileName(dataDirPath, kTableName, i));
+    }
+    shards_[i]->Init(new_db, shard_file);
+  }
+
   // load vin2vid
   {
     vin2vid_lck_.wlock();
     std::string filename = Vin2vidFileName(dataDirPath, kTableName);
-    if (io_manager_->Exist(filename)) {
+    if (io_mgr_->Exist(filename)) {
       LOG_INFO("start load vin2vid");
       SequentialReadFile file(filename);
       int num;
@@ -101,15 +118,13 @@ int TSDBEngineImpl::connect() {
     vin2vid_lck_.unlock();
   }
 
-  table_name_ = kTableName;
-
   // load block meta
   LOG_INFO("start load block meta");
   for (int i = 0; i < kShardNum; i++) {
     std::string filename = ShardMetaFileName(dataDirPath, kTableName, i);
-    if (io_manager_->Exist(filename)) {
+    if (io_mgr_->Exist(filename)) {
       SequentialReadFile file(filename);
-      shard_memtable_->LoadBlockMeta(i, &file);
+      shards_[i]->LoadBlockMeta(&file);
       // 删除文件
       RemoveFile(filename);
     }
@@ -120,20 +135,22 @@ int TSDBEngineImpl::connect() {
   LOG_INFO("start load latest row cache");
   for (int i = 0; i < kShardNum; i++) {
     std::string filename = LatestRowFileName(dataDirPath, kTableName, i);
-    if (io_manager_->Exist(filename)) {
+    if (io_mgr_->Exist(filename)) {
       SequentialReadFile file(filename);
-      shard_memtable_->LoadLatestRowCache(i, &file);
+      shards_[i]->LoadLatestRowCache(&file);
       RemoveFile(filename);
     }
   }
   LOG_INFO("load latest row cache finished");
 
-  if (columns_name_ != nullptr) {
-    shard_memtable_->Init();
-  }
+  std::call_once(start_coro, [this]() {
+    coro_pool_->registerPollingFunc(std::bind(&IOManager::PollingIOEvents, io_mgr_));
+    coro_pool_->start();
+  });
 
   return 0;
 }
+
 int TSDBEngineImpl::createTable(const std::string& tableName, const Schema& schema) {
   LOG_INFO("start create table %s", tableName.c_str());
   LOG_ASSERT(kColumnNum == (int32_t)schema.columnTypeMap.size(), "schema.column.num != 60");
@@ -146,10 +163,7 @@ int TSDBEngineImpl::createTable(const std::string& tableName, const Schema& sche
     columns_type_[i++] = it->second;
   }
 
-  table_name_ = kTableName;
   LOG_INFO("create table %s finished", tableName.c_str());
-
-  shard_memtable_->Init();
   return 0;
 }
 
@@ -170,15 +184,18 @@ void TSDBEngineImpl::saveSchema() {
 
 int TSDBEngineImpl::shutdown() {
   LOG_INFO("start shutdown");
+  delete coro_pool_;
+
   // Close all resources, assuming all writing and reading process has finished.
   // No mutex is fetched by assumptions.
-
   // save schema
+  LOG_INFO("Start Save Schema");
   saveSchema();
 
   // flush memtable
+  LOG_INFO("Start flush memtable");
   for (int i = 0; i < kShardNum; i++) {
-    shard_memtable_->Flush(i);
+    shards_[i]->Flush(true);
   }
 
   print_summary(columns_type_, columns_name_);
@@ -187,22 +204,22 @@ int TSDBEngineImpl::shutdown() {
   // save block meta
   for (int i = 0; i < kShardNum; i++) {
     std::string filename = ShardMetaFileName(dataDirPath, kTableName, i);
-    File* file = io_manager_->Open(filename, NORMAL_FLAG);
-    shard_memtable_->SaveBlockMeta(i, file);
+    File* file = io_mgr_->Open(filename, NORMAL_FLAG);
+    shards_[i]->SaveBlockMeta(file);
   }
 
   // save latest row cache
   for (int i = 0; i < kShardNum; i++) {
     std::string filename = LatestRowFileName(dataDirPath, kTableName, i);
-    File* file = io_manager_->Open(filename, NORMAL_FLAG);
-    shard_memtable_->SaveLatestRowCache(i, file);
+    File* file = io_mgr_->Open(filename, NORMAL_FLAG);
+    shards_[i]->SaveLatestRowCache(file);
   }
 
   // save vin2vid
   {
     vin2vid_lck_.wlock();
     std::string filename = Vin2vidFileName(dataDirPath, kTableName);
-    File* file = io_manager_->Open(filename, NORMAL_FLAG);
+    File* file = io_mgr_->Open(filename, NORMAL_FLAG);
     int num = vin2vid_.size();
     file->write((char*)&num, sizeof(num));
     for (auto& pair : vin2vid_) {
@@ -221,8 +238,10 @@ int TSDBEngineImpl::shutdown() {
     delete[] columns_name_;
   }
 
-  delete io_manager_;
-  delete shard_memtable_;
+  delete io_mgr_;
+  for (int i = 0; i < kShardNum; i++) {
+    delete shards_[i];
+  }
   return 0;
 }
 
@@ -231,8 +250,9 @@ int TSDBEngineImpl::write(const WriteRequest& writeRequest) {
 
   for (auto& row : writeRequest.rows) {
     uint16_t vid = getVidForWrite(row.vin);
+    int shard = sharding(vid);
     LOG_ASSERT(vid != UINT16_MAX, "error");
-    shard_memtable_->Add(row, vid);
+    coro_pool_->enqueue([this, shard, vid, row]() { shards_[shard]->Write(vid, row); }, shard % kWorkerThread);
   }
 
   return 0;
@@ -245,17 +265,24 @@ int TSDBEngineImpl::executeLatestQuery(const LatestQueryRequest& pReadReq, std::
     colids.emplace_back(column_idx_[col_name]);
   }
 
+  WaitGroup wg(pReadReq.vins.size());
   for (const auto& vin : pReadReq.vins) {
     uint16_t vid = getVidForRead(vin);
     if (vid == UINT16_MAX) {
+      wg.Done();
       continue;
     }
-
-    Row row;
-    shard_memtable_->GetLatestRow(vid, row, colids);
-    pReadRes.push_back(std::move(row));
+    int shard = sharding(vid);
+    coro_pool_->enqueue(
+      [this, shard, vid, &colids, &wg, &pReadRes]() {
+        Row row;
+        shards_[shard]->GetLatestRow(vid, colids, row);
+        wg.Done();
+        pReadRes.push_back(std::move(row));
+      },
+      shard % kWorkerThread);
   }
-
+  wg.Wait();
   return 0;
 }
 
@@ -270,8 +297,15 @@ int TSDBEngineImpl::executeTimeRangeQuery(const TimeRangeQueryRequest& trReadReq
     return 0;
   }
 
-  shard_memtable_->GetRowsFromTimeRange(vid, trReadReq.timeLowerBound, trReadReq.timeUpperBound, colids, trReadRes);
-
+  int shard = sharding(vid);
+  WaitGroup wg(1);
+  coro_pool_->enqueue(
+    [this, shard, vid, &trReadReq, &colids, &trReadRes, &wg]() {
+      shards_[shard]->GetRowsFromTimeRange(vid, trReadReq.timeLowerBound, trReadReq.timeUpperBound, colids, trReadRes);
+      wg.Done();
+    },
+    shard % kWorkerThread);
+  wg.Wait();
   return 0;
 }
 

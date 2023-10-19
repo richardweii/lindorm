@@ -76,7 +76,7 @@ void Scheduler::dispatch() {
 
 void Scheduler::wakeup() {
   auto cnt = wakeup_list_.try_dequeue_bulk(wakeup_buf_, coro_num_);
-  for (int i = 0; i < cnt; i++) {
+  for (size_t i = 0; i < cnt; i++) {
     auto coro = wakeup_buf_[i];
     LOG_ASSERT(coro->waiting_events_ == 0, "coro->waiting_events %d != 0", coro->waiting_events_.load());
     LOG_ASSERT(coro->state_ == CoroutineState::WAITING, "state %d", (int)coro->state_);
