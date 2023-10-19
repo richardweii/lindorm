@@ -51,11 +51,6 @@ public:
 
   virtual off_t getFileSz() { return file_sz_; }
 
-  virtual Status asyncWrite(const char* buf, size_t length) {
-    LOG_ASSERT(false, "Not implemented");
-    return Status::NotSupported;
-  }
-
   virtual std::string getFileName() { return filename_; }
 
   virtual ~File() {
@@ -76,12 +71,8 @@ protected:
 class AppendWriteFile : public File {
 public:
   AppendWriteFile(const std::string& filename, int flag) : File(filename) {
-    fd_ = open(filename_.c_str(), flag, 0600);
+    fd_ = open(filename_.c_str(), flag, S_IRUSR | S_IWUSR);
     LOG_ASSERT(fd_ >= 0, "fd_ is %d", fd_);
-
-    memset(&ctx, 0, sizeof(io_context_t));
-    int ret = io_setup(1, &ctx);
-    LOG_ASSERT(ret == 0, "io_setup error ret = %d", ret);
   }
 
   Status write(const char* buf, size_t length) override {
@@ -102,32 +93,6 @@ public:
 
     return Status::OK;
   };
-
-  Status asyncWrite(const char* buf, size_t length) override {
-    // struct iocb io, *p = &io;
-    // io_prep_pwrite(&io, fd_, (void*)buf, length, file_sz);
-    // io_set_callback(&io, write_done);
-    // file_sz_ += length;
-    // int ret = io_submit(ctx, 1, &p);
-    // std::this_thread::yield();
-
-    // LOG_ASSERT(ret == 1, "io_submit error");
-
-    // struct io_event e;
-    // while (1) {
-    //   if (io_getevents(ctx, ret, ret, &e, NULL) == ret) {
-    //     io_callback_t cb = (io_callback_t)e.data;
-    //     cb(ctx, e.obj, e.res, e.res2);
-    //     break;
-    //   }
-    //   std::this_thread::yield();
-    // }
-
-    return Status::OK;
-  }
-
-private:
-  io_context_t ctx;
 };
 
 class SequentialReadFile : public File {
@@ -186,7 +151,7 @@ public:
     AsyncFile* file;
   };
 
-  AsyncFile(const std::string& filename) : File(filename) {}
+  AsyncFile(const std::string& filename) : File(filename) { memset(&ctx_, 0, sizeof(io_context_t)); }
 
   virtual ~AsyncFile() { io_destroy(ctx_); }
 
@@ -209,7 +174,7 @@ protected:
 class AsyncWriteFile : public AsyncFile {
 public:
   AsyncWriteFile(const std::string& filename) : AsyncFile(filename) {
-    fd_ = open(filename.c_str(), LIBAIO_FLAG, 0600);
+    fd_ = open(filename.c_str(), LIBAIO_FLAG, S_IRUSR | S_IWUSR);
     LOG_ASSERT(fd_ >= 0, "fd_ is %d", fd_);
 
     int ret = io_setup(kMaxIONum, &ctx_);
@@ -247,7 +212,7 @@ public:
 class AsyncRandomAccessFile : public AsyncFile {
 public:
   AsyncRandomAccessFile(const std::string& filename) : AsyncFile(filename) {
-    fd_ = open(filename.c_str(), O_RDONLY, 0600);
+    fd_ = open(filename.c_str(), O_RDONLY, S_IRUSR | S_IWUSR);
     LOG_ASSERT(fd_ >= 0, "fd_ is %d", fd_);
 
     int ret = io_setup(kMaxIONum, &ctx_);

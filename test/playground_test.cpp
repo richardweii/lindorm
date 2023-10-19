@@ -31,7 +31,7 @@
 void callback(io_context_t ctx, struct iocb* iocb, long res, long res2) { printf("test call\n"); }
 
 int play_libaio() {
-  int fd = open("/home/wjp/test.txt", O_RDWR | O_DIRECT, 0);
+  int fd = open("/home/wei/test.txt", O_RDWR | O_DIRECT, S_IRUSR | S_IWUSR);
   io_context_t io_context;
   struct iocb io, *p = &io;
   struct io_event event[MAX_EVENT];
@@ -41,7 +41,7 @@ int play_libaio() {
   // strcpy((char*)buf, "hello libaio");
   memset(&io_context, 0, sizeof(io_context));
 
-  if (io_setup(10, &io_context)) {
+  if (io_setup(128, &io_context)) {
     printf("io_setup error");
     return 0;
   }
@@ -64,7 +64,7 @@ int play_libaio() {
     io_callback(io_context, event[i].obj, event[i].res, event[i].res2);
   }
 
-  printf("%s\n", buf);
+  printf("%s", (char*)buf);
 
   close(fd);
   return 0;
