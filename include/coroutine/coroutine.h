@@ -21,7 +21,7 @@ class StackContext {
  public:
   StackContext() : fctx_(), base_(new char[kCoroutineStackSize]), size_(kCoroutineStackSize) {}
   ~StackContext() { delete[] base_; }
-  inline char *sp() { return base_ + kCoroutineStackSize; }  // 栈地址是从高到低的，所以从边界开始
+  inline char *sp() { return base_; }  // 栈地址是从高到低的，所以从边界开始
   inline size_t size() { return size_; }
 
   inline ucontext_t *fctx() { return &fctx_; }

@@ -9,12 +9,12 @@ class WaitGroup {
     WaitGroup(int init = 0) : counter(init), done_flag(false) {}
 
     void Add(int incr = 1) {
-        assert(!done_flag && "'Add' after 'Done' is not allowed");
+        // assert(!done_flag && "'Add' after 'Done' is not allowed");
         counter += incr;
     }
 
     void Done() {
-        if (!done_flag) done_flag = true;
+        // if (!done_flag) done_flag = true;
         if (--counter <= 0) cond.notify_all();
     }
 

@@ -72,6 +72,9 @@ class AppendWriteFile : public File {
 public:
   AppendWriteFile(const std::string& filename, int flag) : File(filename) {
     fd_ = open(filename_.c_str(), flag, S_IRUSR | S_IWUSR);
+    if (fd_ < 0) {
+      perror("Open File failed.");
+    }
     LOG_ASSERT(fd_ >= 0, "fd_ is %d", fd_);
   }
 
@@ -151,7 +154,13 @@ public:
     AsyncFile* file;
   };
 
-  AsyncFile(const std::string& filename) : File(filename) { memset(&ctx_, 0, sizeof(io_context_t)); }
+  AsyncFile(const std::string& filename) : File(filename) {
+    memset(&ctx_, 0, sizeof(io_context_t));
+    for (int i = 0; i < kMaxIONum; i++) {
+      iocb_data_[i].coro = nullptr;
+      iocb_data_[i].file = this;
+    }
+  }
 
   virtual ~AsyncFile() { io_destroy(ctx_); }
 
@@ -168,7 +177,7 @@ protected:
   io_context_t ctx_;
   IOContext iocb_data_[kMaxIONum];
   std::list<IOContext*> ctx_list_;
-  int inflight_;
+  int inflight_{0};
 };
 
 class AsyncWriteFile : public AsyncFile {

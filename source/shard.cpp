@@ -11,10 +11,11 @@ Status ReadCache::PutColumn(BlockMeta* meta, int colid, ColumnArrWrapper* col_da
   while (total_sz_ + col_data->TotalSize() >= max_sz_) {
     // 缓存已满
     auto victim = lru_list_.back();
-    cache_.erase(victim);
     auto sz = victim.column_arr->TotalSize();
+    delete victim.column_arr;
     total_sz_ -= sz;
     lru_list_.pop_back();
+    cache_.erase(victim);
   }
 
   // 插入新元素到缓存和链表头部
@@ -135,7 +136,7 @@ void ShardImpl::Write(uint16_t vid, const Row& row) {
 };
 
 Status ShardImpl::Flush(bool shutdown) {
-  if (memtable_->cnt_ == 0) return Status::OK;
+  if (memtable_ == nullptr || memtable_->cnt_ == 0) return Status::OK;
 
   // 如果memtable中的row是更新的，则用memtable的最新来设置缓存的latest row
   for (int svid = 0; svid < kVinNumPerShard; svid++) {
@@ -203,7 +204,7 @@ void ShardImpl::GetRowsFromTimeRange(uint64_t vid, int64_t lowerInclusive, int64
   File* rfile = data_file_;
   if (UNLIKELY(write_phase_)) {
     std::string file_name = ShardDataFileName(engine_->dataDirPath, kTableName, shard_id_);
-    rfile = new AsyncRandomAccessFile(file_name);
+    rfile = new RandomAccessFile(file_name);
   }
 
   if (!blk_metas.empty()) {
@@ -242,7 +243,7 @@ void ShardImpl::GetRowsFromTimeRange(uint64_t vid, int64_t lowerInclusive, int64
       std::vector<uint16_t> idxs;
       std::vector<int64_t> tss;
       findMatchingIndices(tmp_vid_col->GetDataArr(), tmp_ts_col->GetDataArr(), tmp_idx_col->GetDataArr(), blk_meta->num,
-                          vid, lowerInclusive, upperExclusive, idxs, tss);
+                          vid2svid(vid), lowerInclusive, upperExclusive, idxs, tss);
 
       if (!idxs.empty()) {
         for (int i = 0; i < (int)idxs.size(); i++) {
@@ -268,5 +269,17 @@ void ShardImpl::GetRowsFromTimeRange(uint64_t vid, int64_t lowerInclusive, int64
       delete tmp_idx_col;
     }
   }
+};
+
+ShardImpl::~ShardImpl() {
+  delete memtable_;
+  delete read_cache_;
+  delete write_buf_;
+  delete block_mgr_;
+};
+
+void ShardImpl::InitMemTable() {
+  LOG_ASSERT(memtable_ != nullptr, "invalid memtable nullptr.");
+  memtable_->Init();
 };
 } // namespace LindormContest

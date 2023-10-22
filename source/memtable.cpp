@@ -66,7 +66,7 @@ void MemTable::GetRowsFromTimeRange(uint64_t vid, int64_t lowerInclusive, int64_
     // 有重合，需要遍历memtable，首先找到vin + ts符合要求的行索引
     std::vector<int> idxs;
     for (int i = 0; i < cnt_; i++) {
-      if (svid_col_->GetVal(i) == (int64_t)vid && inRange(ts_col_->GetVal(i), lowerInclusive, upperExclusive)) {
+      if (svid_col_->GetVal(i) == (int64_t)svid && inRange(ts_col_->GetVal(i), lowerInclusive, upperExclusive)) {
         idxs.emplace_back(i);
       }
     }
@@ -98,7 +98,7 @@ bool MemTable::Write(uint16_t svid, const Row& row) {
 
   int colid = 0;
   for (auto& col : row.columns) {
-    LOG_ASSERT(col.first != engine_->columns_name_[colid], "invalid column");
+    LOG_ASSERT(col.first == engine_->columns_name_[colid], "invalid column");
     columnArrs_[colid++]->Add(col.second, cnt_);
   }
 

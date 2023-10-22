@@ -47,16 +47,22 @@ private:
   std::list<Col> lru_list_;
   void updateList(const Col& key);
 
-  size_t total_sz_;     // 内存用量
-  const size_t max_sz_; // cache上限量
+  size_t total_sz_{0};     // 内存用量
+  const size_t max_sz_{0}; // cache上限量
 };
 
 // 存储分片
 class ShardImpl {
 public:
-  ShardImpl(int shard_id, TSDBEngineImpl* engine) : shard_id_(shard_id), engine_(engine) {}
-
+  ShardImpl(int shard_id, TSDBEngineImpl* engine) : shard_id_(shard_id), engine_(engine) {
+    for (int i = 0; i < kVinNumPerShard; i++) {
+      latest_ts_cache_[i] = -1;
+    }
+  }
+  ~ShardImpl();
   void Init(bool write_phase, File* data_file);
+
+  void InitMemTable();
 
   void Write(uint16_t vid, const Row& row);
 

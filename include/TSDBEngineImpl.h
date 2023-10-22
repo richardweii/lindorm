@@ -17,13 +17,11 @@
 #include "coroutine/coroutine_pool.h"
 #include "io/io_manager.h"
 #include "util/rwlock.h"
+#include "util/waitgroup.h"
 
 namespace LindormContest {
 class ShardImpl;
 class TSDBEngineImpl : public TSDBEngine {
-  // How many columns is defined in schema for the sole table.
-  static constexpr int kColumnNum = 60;
-
 public:
   /**
    * This constructor's function signature should not be modified.
@@ -39,6 +37,8 @@ public:
   int shutdown() override;
 
   int write(const WriteRequest& writeRequest) override;
+
+  void wait_write() { inflight_write_.Wait(); };
 
   int executeLatestQuery(const LatestQueryRequest& pReadReq, std::vector<Row>& pReadRes) override;
 
@@ -81,7 +81,10 @@ private:
   ShardImpl* shards_[kShardNum];
   bool new_db = false;
 
-  CoroutinePool *coro_pool_{nullptr};
+  CoroutinePool* coro_pool_{nullptr};
+  void* mem_pool_addr_{nullptr};
+
+  WaitGroup inflight_write_{0};
 }; // End class TSDBEngineImpl.
 
 } // namespace LindormContest

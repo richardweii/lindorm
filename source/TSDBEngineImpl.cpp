@@ -37,13 +37,7 @@ namespace LindormContest {
  * Our evaluation program will call this constructor.
  * The function's body can be modified.
  */
-TSDBEngineImpl::TSDBEngineImpl(const std::string& dataDirPath) : TSDBEngine(dataDirPath) {
-  io_mgr_ = new IOManager();
-  for (int i = 0; i < kShardNum; i++) {
-    shards_[i] = new ShardImpl(i, this);
-  }
-  coro_pool_ = new CoroutinePool(kWorkerThread, kCoroutinePerThread);
-}
+TSDBEngineImpl::TSDBEngineImpl(const std::string& dataDirPath) : TSDBEngine(dataDirPath) {}
 
 void TSDBEngineImpl::loadSchema() {
   LOG_INFO("start Load Schema");
@@ -80,6 +74,11 @@ void TSDBEngineImpl::loadSchema() {
 }
 
 int TSDBEngineImpl::connect() {
+  io_mgr_ = new IOManager();
+  for (int i = 0; i < kShardNum; i++) {
+    shards_[i] = new ShardImpl(i, this);
+  }
+  coro_pool_ = new CoroutinePool(kWorkerThread, kCoroutinePerThread);
   print_memory_usage();
   loadSchema();
 
@@ -143,11 +142,11 @@ int TSDBEngineImpl::connect() {
   }
   LOG_INFO("load latest row cache finished");
 
-  std::call_once(start_coro, [this]() {
-    coro_pool_->registerPollingFunc(std::bind(&IOManager::PollingIOEvents, io_mgr_));
-    coro_pool_->start();
-  });
+  mem_pool_addr_ = std::aligned_alloc(512, kMemoryPoolSz);
+  InitMemPool(mem_pool_addr_, kMemoryPoolSz, 512 * KB);
 
+  coro_pool_->registerPollingFunc(std::bind(&IOManager::PollingIOEvents, io_mgr_));
+  coro_pool_->start();
   return 0;
 }
 
@@ -161,6 +160,10 @@ int TSDBEngineImpl::createTable(const std::string& tableName, const Schema& sche
     column_idx_.emplace(it->first, i);
     columns_name_[i] = it->first;
     columns_type_[i++] = it->second;
+  }
+
+  for (int i = 0; i < kShardNum; i++) {
+    shards_[i]->InitMemTable();
   }
 
   LOG_INFO("create table %s finished", tableName.c_str());
@@ -184,8 +187,7 @@ void TSDBEngineImpl::saveSchema() {
 
 int TSDBEngineImpl::shutdown() {
   LOG_INFO("start shutdown");
-  delete coro_pool_;
-
+  inflight_write_.Wait();
   // Close all resources, assuming all writing and reading process has finished.
   // No mutex is fetched by assumptions.
   // save schema
@@ -194,9 +196,14 @@ int TSDBEngineImpl::shutdown() {
 
   // flush memtable
   LOG_INFO("Start flush memtable");
+  WaitGroup wg(kShardNum);
   for (int i = 0; i < kShardNum; i++) {
-    shards_[i]->Flush(true);
+    coro_pool_->enqueue([&wg, this, i]() {
+      shards_[i]->Flush(true);
+      wg.Done();
+    });
   }
+  wg.Wait();
 
   print_summary(columns_type_, columns_name_);
   print_memory_usage();
@@ -230,18 +237,37 @@ int TSDBEngineImpl::shutdown() {
     vin2vid_lck_.unlock();
   }
 
+  if (coro_pool_ != nullptr) {
+    delete coro_pool_;
+    coro_pool_ = nullptr;
+  }
+
   if (columns_type_ != nullptr) {
     delete[] columns_type_;
+    columns_type_ = nullptr;
   }
 
   if (columns_name_ != nullptr) {
     delete[] columns_name_;
+    columns_name_ = nullptr;
   }
 
-  delete io_mgr_;
-  for (int i = 0; i < kShardNum; i++) {
-    delete shards_[i];
+  if (io_mgr_ != nullptr) {
+    delete io_mgr_;
+    io_mgr_ = nullptr;
   }
+
+  for (int i = 0; i < kShardNum; i++) {
+    if (shards_[i] != nullptr) {
+      delete shards_[i];
+      shards_[i] = nullptr;
+    }
+  }
+
+  DestroyMemPool();
+  std::free(mem_pool_addr_);
+  mem_pool_addr_ = nullptr;
+
   return 0;
 }
 
@@ -252,7 +278,13 @@ int TSDBEngineImpl::write(const WriteRequest& writeRequest) {
     uint16_t vid = getVidForWrite(row.vin);
     int shard = sharding(vid);
     LOG_ASSERT(vid != UINT16_MAX, "error");
-    coro_pool_->enqueue([this, shard, vid, row]() { shards_[shard]->Write(vid, row); }, shard % kWorkerThread);
+    inflight_write_.Add();
+    coro_pool_->enqueue(
+      [this, shard, vid, row]() {
+        shards_[shard]->Write(vid, row);
+        inflight_write_.Done();
+      },
+      shard % kWorkerThread);
   }
 
   return 0;
@@ -277,8 +309,8 @@ int TSDBEngineImpl::executeLatestQuery(const LatestQueryRequest& pReadReq, std::
       [this, shard, vid, &colids, &wg, &pReadRes]() {
         Row row;
         shards_[shard]->GetLatestRow(vid, colids, row);
-        wg.Done();
         pReadRes.push_back(std::move(row));
+        wg.Done();
       },
       shard % kWorkerThread);
   }
@@ -342,8 +374,8 @@ uint16_t TSDBEngineImpl::getVidForWrite(const Vin& vin) {
   std::string str(vin.vin, VIN_LENGTH);
   auto it = vin2vid_.find(str);
   if (LIKELY(it != vin2vid_.cend())) {
-    vin2vid_lck_.unlock();
     vid = it->second;
+    vin2vid_lck_.unlock();
   } else {
     vin2vid_lck_.unlock();
     vin2vid_lck_.wlock();

@@ -64,8 +64,8 @@ public:
   }
 
   void flush() {
-    AppendWriteFile f(file_->getFileName(), NORMAL_FLAG);
-    f.write((const char*)buffer_, offset_);
+    auto rc = file_->write((const char*)buffer_, kWriteBufferSize);
+    LOG_ASSERT(rc == Status::OK, "async write io buffer failed.");
     offset_ = 0;
   }
 

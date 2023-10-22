@@ -9,7 +9,7 @@
 #define ASSERT(condition, format, ...)                                                                                      \
   if (!(condition)) {                                                                                                       \
     OUTPUT("\033[;31mAssertion ' %s ' Failed!\n%s:%d: " format "\n\033[0m", #condition, __FILE__, __LINE__, ##__VA_ARGS__); \
-    exit(1);                                                                                                                \
+    abort();                                                                                                                \
   }
 
 #define EXPECT(condition, format, ...)                                                                                 \

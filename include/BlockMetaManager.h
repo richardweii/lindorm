@@ -139,17 +139,15 @@ public:
   }
 
   virtual ~BlockMetaManager() {
-    for (int shard_id = 0; shard_id < kShardNum; shard_id++) {
-      int num = 0;
-      BlockMeta* next = nullptr;
-      while (head_ != nullptr) {
-        next = head_->next;
-        delete head_;
-        head_ = next;
-        num++;
-      }
-      LOG_ASSERT(num == block_cnts_, "num != block_cnt");
+    int num = 0;
+    BlockMeta* next = nullptr;
+    while (head_ != nullptr) {
+      next = head_->next;
+      delete head_;
+      head_ = next;
+      num++;
     }
+    LOG_ASSERT(num == block_cnts_, "num != block_cnt");
   }
 
 private:

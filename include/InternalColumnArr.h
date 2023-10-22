@@ -71,13 +71,14 @@ public:
   void Read(File* file, AlignedWriteBuffer* buffer, BlockMeta* meta) {
     LOG_ASSERT(meta != nullptr, "error");
 
-    // buf的长度按512字节对齐
-    size_t compressed_buf_sz = roundup512(meta->compress_sz[col_id_]);
-    auto buf = reinterpret_cast<char*>(BuddyThreadHeap::get_instance()->alloc(compressed_buf_sz));
-    char* compressed_data = buf;
-
+    // buf 和offset 的按512字节对齐
     uint64_t offset = meta->offset[col_id_];
     size_t compress_sz = meta->compress_sz[col_id_];
+
+    uint64_t file_read_off = rounddown512(meta->offset[col_id_]);                                 // offset对齐
+    size_t compressed_buf_sz = roundup512(meta->compress_sz[col_id_] + (offset - file_read_off)); // 预留足够的空间
+    auto buf = reinterpret_cast<char*>(BuddyThreadHeap::get_instance()->alloc(compressed_buf_sz));
+    char* compressed_data = buf;
 
     if (LIKELY(buffer == nullptr) || buffer->empty() || offset + compress_sz <= (uint64_t)buffer->FlushedSz()) {
       // 全部在文件里面
@@ -85,11 +86,10 @@ public:
       fstat(file->fd(), &st);
       LOG_ASSERT(offset + compress_sz <= (uint64_t)st.st_size, "offset %lu read size %lu filesz %lu", offset,
                  compress_sz, st.st_size);
-      auto read_off = rounddown512(offset);
-      file->read(compressed_data, compressed_buf_sz, read_off);
-      compressed_data += (offset - read_off); // 偏移修正
+      file->read(compressed_data, compressed_buf_sz, file_read_off);
+      compressed_data += (offset - file_read_off); // 偏移修正
     } else {
-      if (offset >= (uint64_t)buffer->FlushedSz() * (uint64_t)kWriteBufferSize) {
+      if (offset >= (uint64_t)buffer->FlushedSz()) {
         // 全部在buffer里面
         buffer->read(compressed_data, compress_sz, offset);
       } else {
@@ -98,9 +98,9 @@ public:
         struct stat st;
         fstat(file->fd(), &st);
         // 先从文件读取
-        auto read_off = rounddown512(offset);
-        file->read(compressed_data, roundup512(st.st_size - offset), read_off);
-        compressed_data += (read_off - offset); // 偏移修正
+        LOG_ASSERT((st.st_size - file_read_off) % 512 == 0, "invalid stsize.");
+        file->read(compressed_data, st.st_size - file_read_off, file_read_off);
+        compressed_data += (offset - file_read_off); // 偏移修正
 
         // 再从缓冲区读取
         buffer->read(compressed_data + st.st_size - offset, compress_sz - (st.st_size - offset), st.st_size);
@@ -205,15 +205,16 @@ public:
   void Read(File* file, AlignedWriteBuffer* buffer, BlockMeta* meta) {
     LOG_ASSERT(meta != nullptr, "error");
 
-    size_t compress_buf_sz = roundup512(meta->compress_sz[col_id_]);
-    size_t origin_buf_sz = meta->origin_sz[col_id_];
-
-    char* compress_buf = reinterpret_cast<char*>(BuddyThreadHeap::get_instance()->alloc(compress_buf_sz));
-    char* compress_data = compress_buf;
-    char* origin_buf = reinterpret_cast<char*>(BuddyThreadHeap::get_instance()->alloc(origin_buf_sz));
-
     uint64_t offset = meta->offset[col_id_];
     size_t compress_sz = meta->compress_sz[col_id_];
+
+    uint64_t file_read_off = rounddown512(meta->offset[col_id_]);                                 // offset对齐
+    size_t compressed_buf_sz = roundup512(meta->compress_sz[col_id_] + (offset - file_read_off)); // 预留足够的空间
+    size_t origin_buf_sz = meta->origin_sz[col_id_];
+
+    char* compress_buf = reinterpret_cast<char*>(BuddyThreadHeap::get_instance()->alloc(compressed_buf_sz));
+    char* compress_data = compress_buf;
+    char* origin_buf = reinterpret_cast<char*>(BuddyThreadHeap::get_instance()->alloc(origin_buf_sz));
 
     if (LIKELY(buffer == nullptr) || buffer->empty() || offset + compress_sz <= buffer->FlushedSz()) {
       // 全部在文件里面
@@ -222,9 +223,8 @@ public:
       LOG_ASSERT(offset + compress_sz <= (uint64_t)st.st_size, "offset %lu read size %lu filesz %lu", offset,
                  compress_sz, st.st_size);
 
-      auto read_off = rounddown512(offset);
-      file->read(compress_data, compress_buf_sz, read_off);
-      compress_data += (offset - read_off); // 偏移修正
+      file->read(compress_data, compressed_buf_sz, file_read_off);
+      compress_data += (offset - file_read_off); // 偏移修正
     } else {
       if (offset >= buffer->FlushedSz()) {
         // 全部在buffer里面
@@ -235,9 +235,9 @@ public:
         struct stat st;
         fstat(file->fd(), &st);
         // 先从文件读取
-        auto read_off = rounddown512(offset);
-        file->read(compress_data, roundup512(st.st_size - offset), read_off);
-        compress_data += (offset - read_off);
+        LOG_ASSERT((st.st_size - file_read_off) % 512 == 0, "invalid stsize.");
+        file->read(compress_data, st.st_size - file_read_off, file_read_off);
+        compress_data += (offset - file_read_off);
         // 再从缓冲区读取
         buffer->read(compress_data + st.st_size - offset, compress_sz - (st.st_size - offset), st.st_size);
       }
