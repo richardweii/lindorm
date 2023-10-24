@@ -59,7 +59,7 @@ class Coroutine {
   Scheduler *sched_;
   StackContext ctx_;
   CoroutineTask task_;
-  std::atomic_int waiting_events_{};
+  std::atomic_int waiting_events_{0};
   std::list<Coroutine *>::iterator iter{};
   CoroutineState state_{CoroutineState::IDLE};
   //---------- for user ------------

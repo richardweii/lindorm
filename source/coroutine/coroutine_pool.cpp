@@ -6,7 +6,7 @@
 CoroutinePool::CoroutinePool(int thread_num, int coroutine_per_thread) : worker_num_(thread_num) {
   schedulers_.reserve(thread_num);
   for (int i = 0; i < thread_num; i++) {
-    schedulers_.emplace_back(new Scheduler(coroutine_per_thread));
+    schedulers_.emplace_back(new Scheduler(coroutine_per_thread, i));
   }
 };
 

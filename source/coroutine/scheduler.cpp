@@ -5,12 +5,13 @@
 #include "coroutine/coroutine.h"
 #include "util/likely.h"
 #include "util/logging.h"
+#include "util/stat.h"
 
 thread_local Scheduler* scheduler = nullptr;
 
 std::atomic_int id_generator{0};
 
-Scheduler::Scheduler(int coroutine_num) : Coroutine(-1, this), coro_num_(coroutine_num) {
+Scheduler::Scheduler(int coroutine_num, int tid) : Coroutine(-1, this), coro_num_(coroutine_num), tid_(tid) {
   // init coroutine
   coros_.reserve(coroutine_num);
   for (int i = 0; i < coroutine_num; i++) {

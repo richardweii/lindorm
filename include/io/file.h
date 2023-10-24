@@ -148,10 +148,11 @@ public:
 
 class AsyncFile : public File {
 public:
-  static constexpr int kMaxIONum = 128;
+  static constexpr int kMaxIONum = 1024;
   struct IOContext {
     Coroutine* coro;
     AsyncFile* file;
+    iocb cb;
   };
 
   AsyncFile(const std::string& filename) : File(filename) {
@@ -177,7 +178,7 @@ protected:
   io_context_t ctx_;
   IOContext iocb_data_[kMaxIONum];
   std::list<IOContext*> ctx_list_;
-  int inflight_{0};
+  volatile int inflight_{0};
 };
 
 class AsyncWriteFile : public AsyncFile {
@@ -233,7 +234,7 @@ public:
 
   // NOT THREAD-SAFE，上层需要保证buf、len、offset都是512对齐的
   Status read(char* res_buf, size_t length, off_t pos) override {
-    ENSURE(inflight_ >= 0 && inflight_ < kMaxIONum, "too many parallel write");
+    ENSURE(inflight_ >= 0 && inflight_ < kMaxIONum, "too many parallel read");
     ENSURE((length & 511) == 0, "invalid length.");
     ENSURE(((uint64_t)res_buf & 511) == 0, "invalid res_buf.");
     ENSURE((pos & 511) == 0, "invalid pos.");

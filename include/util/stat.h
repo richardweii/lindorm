@@ -26,6 +26,9 @@ extern std::atomic<int64_t> tr_disk_blk_query_cnt;
 extern std::atomic<int64_t> origin_szs[];
 extern std::atomic<int64_t> compress_szs[];
 
+extern std::atomic<int64_t> cache_hit;
+extern std::atomic<int64_t> cache_cnt;
+
 #define ENABLE_STAT
 #ifdef ENABLE_STAT
 #define RECORD_FETCH_ADD(num, delta) (num.fetch_add(delta))

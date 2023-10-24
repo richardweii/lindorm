@@ -243,11 +243,12 @@ void parallel_test_latest(LindormContest::TSDBEngine* engine) {
   LOG_INFO("start parallel test latest...");
   // validate executeLatestQuery
   std::vector<std::thread> threads;
-  const int thread_num = 1;
+  const int thread_num = 32;
   const int per_thread_vin_num = kVinNum / thread_num;
 
+  Progress pgrs(kVinNum);
   for (int t = 0; t < thread_num; t++) {
-    threads.emplace_back([=]() {
+    threads.emplace_back([t, engine, &pgrs]() {
       for (int i = t * per_thread_vin_num; i < (t + 1) * per_thread_vin_num; i++) {
         LindormContest::LatestQueryRequest pReadReq;
         std::vector<LindormContest::Row> pReadRes;
@@ -263,9 +264,13 @@ void parallel_test_latest(LindormContest::TSDBEngine* engine) {
         ASSERT(pReadRes.size() == 1, "executeLatestQuery failed");
         auto row = pReadRes[0];
         ASSERT(RowEquals(row, rows[i][kRowsPerVin - 1]), "error");
+        pgrs.wg()->Done();
       }
     });
   }
+
+  pgrs.Wait();
+  pgrs.Finish();
 
   for (auto& th : threads) {
     th.join();
@@ -278,11 +283,12 @@ void parallel_test_time_range(LindormContest::TSDBEngine* engine) {
   LOG_INFO("start parallel test time range...");
   // validate time range
   std::vector<std::thread> threads;
-  const int thread_num = 1;
+  const int thread_num = 16;
   const int per_thread_vin_num = kVinNum / thread_num;
 
+  Progress pgrs(kVinNum);
   for (int t = 0; t < thread_num; t++) {
-    threads.emplace_back([=]() {
+    threads.emplace_back([t, engine, &pgrs]() {
       for (int i = t * per_thread_vin_num; i < (t + 1) * per_thread_vin_num; i++) {
         LindormContest::TimeRangeQueryRequest trR;
         LindormContest::Vin vin;
@@ -301,17 +307,20 @@ void parallel_test_time_range(LindormContest::TSDBEngine* engine) {
         std::sort(trReadRes.begin(), trReadRes.end());
         int64_t ts = 0;
         for (auto& r : trReadRes) {
-          EXPECT(r.timestamp == ts,"r.timestamp %ld %ld", r.timestamp, ts);
-          ts++; 
+          EXPECT(r.timestamp == ts, "r.timestamp %ld %ld", r.timestamp, ts);
+          ts++;
         }
         ASSERT(trReadRes.size() == res_cnt, "size = %zu", trReadRes.size());
         for (auto& row : trReadRes) {
           ASSERT(RowEquals(row, rows[i][row.timestamp % kRowsPerVin]), "not equal");
         }
+        pgrs.wg()->Done();
       }
     });
   }
 
+  pgrs.Wait();
+  pgrs.Finish();
   for (auto& th : threads) {
     th.join();
   }

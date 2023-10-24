@@ -23,6 +23,9 @@ std::atomic<int64_t> tr_disk_blk_query_cnt{0};     // time range遍历的磁盘�
 
 std::atomic<int64_t> origin_szs[kColumnNum + kExtraColNum];
 std::atomic<int64_t> compress_szs[kColumnNum + kExtraColNum];
+
+std::atomic<int64_t> cache_hit{0};
+std::atomic<int64_t> cache_cnt{0};
 std::string types[] = {
   "NULL",
   "string",
@@ -46,6 +49,8 @@ void print_summary(ColumnType* columnsType, std::string* columnsName) {
     LOG_INFO("col %d, origin_sz %ld MB, compress_sz %ld MB compress rate is %f", i, origin_szs[i].load() / MB,
              compress_szs[i].load() / MB, (compress_szs[i] * 1.0) / (origin_szs[i] * 1.0));
   }
+  LOG_INFO("ReadCache Hit: %ld, MISS: %ld, HitRate: %lf", cache_hit.load(), cache_cnt.load() - cache_hit.load(),
+           cache_hit.load() * 1.0 / cache_cnt.load());
 }
 
 void print_row(const Row& row, uint16_t vid) {

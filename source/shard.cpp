@@ -27,17 +27,19 @@ Status ReadCache::PutColumn(BlockMeta* meta, int colid, ColumnArrWrapper* col_da
 
 ColumnArrWrapper* ReadCache::GetColumn(BlockMeta* meta, int colid) {
   Col key = {.ptr = meta, .colid = colid};
-  if (cache_.find(key) == cache_.end()) {
+  auto iter = cache_.find(key);
+  if (iter == cache_.end()) {
     return nullptr;
   }
 
-  updateList(key);
+  updateList(*iter->second);
 
   return cache_[key]->column_arr;
 };
 
 void ReadCache::updateList(const Col& key) {
   // 移除原来位置的元素，插入到链表头部
+  LOG_ASSERT(key.column_arr != nullptr, "empty node");
   lru_list_.erase(cache_[key]);
   lru_list_.push_front(key);
   cache_[key] = lru_list_.begin();
@@ -47,13 +49,16 @@ void ShardImpl::Init(bool write_phase, File* data_file) {
   data_file_ = data_file;
   write_phase_ = write_phase;
 
-  size_t read_cache_sz = write_phase_ ? (1 * MB) : kReadCacheSize;
-  read_cache_ = new ReadCache(kReadCacheSize);
+  size_t read_cache_sz = write_phase_ ? kReadCacheSize / 4 : kReadCacheSize;
+  read_cache_ = new ReadCache(read_cache_sz);
   block_mgr_ = new BlockMetaManager();
 
   if (write_phase_) {
+    LOG_INFO("write phase");
     write_buf_ = new AlignedWriteBuffer(data_file);
-    memtable_ = new MemTable(shard_id_, engine_);
+    two_memtable_[0] = new MemTable(shard_id_, engine_);
+    two_memtable_[1] = new MemTable(shard_id_, engine_);
+    memtable_ = two_memtable_[memtable_id];
   }
 };
 
@@ -127,7 +132,11 @@ void ShardImpl::LoadLatestRowCache(File* file) {
 };
 
 void ShardImpl::Write(uint16_t vid, const Row& row) {
+  // LOG_DEBUG("write shard %d vid", vid);
   int svid = vid2svid(vid);
+  while (memtable_->in_flush_) { // 有可能不停的有协程在flush,所以要用while保证是可用的memtable
+    memtable_->cv_.wait();
+  }
   if (memtable_->Write(svid, row)) {
     // flush memtable to file
     auto rc = Flush();
@@ -136,38 +145,49 @@ void ShardImpl::Write(uint16_t vid, const Row& row) {
 };
 
 Status ShardImpl::Flush(bool shutdown) {
-  if (memtable_ == nullptr || memtable_->cnt_ == 0) return Status::OK;
+  if (memtable_ == nullptr) {
+    return Status::OK;
+  }
+  MemTable* immutable_mmt = memtable_;
+  immutable_mmt->in_flush_ = true;
+
+  memtable_id = 1 - memtable_id;
+  memtable_ = two_memtable_[memtable_id];
 
   // 如果memtable中的row是更新的，则用memtable的最新来设置缓存的latest row
-  for (int svid = 0; svid < kVinNumPerShard; svid++) {
-    if (memtable_->mem_latest_row_ts_[svid] > latest_ts_cache_[svid]) {
-      latest_ts_cache_[svid] = memtable_->mem_latest_row_ts_[svid];
-      int idx = memtable_->mem_latest_row_idx_[svid];
-      for (int colid = 0; colid < kColumnNum; colid++) {
-        memtable_->columnArrs_[colid]->Get(idx, latest_ts_cols_[svid][colid]);
+  if (LIKELY(immutable_mmt->cnt_ != 0)) {
+    for (int svid = 0; svid < kVinNumPerShard; svid++) {
+      if (immutable_mmt->mem_latest_row_ts_[svid] > latest_ts_cache_[svid]) {
+        latest_ts_cache_[svid] = immutable_mmt->mem_latest_row_ts_[svid];
+        int idx = immutable_mmt->mem_latest_row_idx_[svid];
+        for (int colid = 0; colid < kColumnNum; colid++) {
+          immutable_mmt->columnArrs_[colid]->Get(idx, latest_ts_cols_[svid][colid]);
+        }
       }
     }
+
+    BlockMeta* meta = block_mgr_->NewVinBlockMeta(immutable_mmt->cnt_, immutable_mmt->min_ts_, immutable_mmt->max_ts_);
+
+    // 先对 vid + ts idx这三列进行排序
+    immutable_mmt->sort();
+
+    // 刷写数据列
+    for (int i = 0; i < kColumnNum; i++) {
+      immutable_mmt->columnArrs_[i]->Flush(write_buf_, immutable_mmt->cnt_, meta);
+    }
+    immutable_mmt->svid_col_->Flush(write_buf_, immutable_mmt->cnt_, meta);
+    immutable_mmt->ts_col_->Flush(write_buf_, immutable_mmt->cnt_, meta);
+    immutable_mmt->idx_col_->Flush(write_buf_, immutable_mmt->cnt_, meta);
+
+    immutable_mmt->cnt_ = 0;
+    immutable_mmt->Reset();
+    immutable_mmt->cv_.notify();
   }
-
-  BlockMeta* meta = block_mgr_->NewVinBlockMeta(memtable_->cnt_, memtable_->min_ts_, memtable_->max_ts_);
-
-  // 先对 vid + ts idx这三列进行排序
-  memtable_->sort();
-
-  // 刷写数据列
-  for (int i = 0; i < kColumnNum; i++) {
-    memtable_->columnArrs_[i]->Flush(write_buf_, memtable_->cnt_, meta);
-  }
-  memtable_->svid_col_->Flush(write_buf_, memtable_->cnt_, meta);
-  memtable_->ts_col_->Flush(write_buf_, memtable_->cnt_, meta);
-  memtable_->idx_col_->Flush(write_buf_, memtable_->cnt_, meta);
 
   if (shutdown) {
     write_buf_->flush();
   }
 
-  memtable_->cnt_ = 0;
-  memtable_->Reset();
   return Status::OK;
 };
 
@@ -259,15 +279,11 @@ void ShardImpl::GetRowsFromTimeRange(uint64_t vid, int64_t lowerInclusive, int64
           results.push_back(std::move(resultRow));
         }
       }
-
-      for (size_t k = 0; k < colids.size(); k++) {
-        delete cols[k];
-      }
-
-      delete tmp_vid_col;
-      delete tmp_ts_col;
-      delete tmp_idx_col;
     }
+  }
+
+  if (rfile != data_file_) {
+    delete rfile;
   }
 };
 
@@ -280,6 +296,7 @@ ShardImpl::~ShardImpl() {
 
 void ShardImpl::InitMemTable() {
   LOG_ASSERT(memtable_ != nullptr, "invalid memtable nullptr.");
-  memtable_->Init();
+  two_memtable_[0]->Init();
+  two_memtable_[1]->Init();
 };
 } // namespace LindormContest

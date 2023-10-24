@@ -7,6 +7,7 @@
 #include <vector>
 
 #include "coroutine/coroutine.h"
+#include "util/logging.h"
 
 using TaskQueue = moodycamel::ConcurrentQueue<CoroutineTask>;
 using AdvanceFunc = std::function<void()>;
@@ -23,7 +24,7 @@ class Scheduler : public Coroutine {
   static constexpr size_t kTaskBufLen = 128;
 
 public:
-  explicit Scheduler(int coroutine_num);
+  explicit Scheduler(int coroutine_num, int tid);
   ~Scheduler();
   void registerPollingFunc(AdvanceFunc func) { polling_ = std::move(func); }
   void scheduling();
@@ -33,6 +34,8 @@ public:
 
   friend Coroutine* this_coroutine::current();
 
+  int tid() const { return tid_; }
+
 private:
   Coroutine* current_{};
   void dispatch();
@@ -40,6 +43,7 @@ private:
 
   volatile bool stop = false;
   int coro_num_;
+  int tid_;
 
   TaskQueue queue_;
   CoroutineTask task_buf_[kTaskBufLen];

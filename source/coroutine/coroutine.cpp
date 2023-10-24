@@ -51,6 +51,9 @@ void Coroutine::co_wait(int events) {
 extern thread_local Scheduler* scheduler;
 
 void Coroutine::wakeup_once() {
+  if (waiting_events_ == 0) {
+    LOG_DEBUG("ERROR");
+  }
   if ((--waiting_events_) == 0) {
     LOG_ASSERT(scheduler != nullptr, "invalid scheduler");
     sched_->addWakupCoroutine(this);

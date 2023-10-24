@@ -7,6 +7,7 @@
 #include "InternalColumnArr.h"
 #include "TSDBEngineImpl.h"
 #include "common.h"
+#include "coroutine/coro_cond.h"
 #include "filename.h"
 #include "io/aligned_buffer.h"
 #include "io/file.h"
@@ -87,6 +88,10 @@ private:
   // mem latest row idx and ts
   int64_t mem_latest_row_idx_[kVinNumPerShard];
   int64_t mem_latest_row_ts_[kVinNumPerShard];
+
+  volatile bool in_flush_{false};
+
+  CoroCV cv_;
 };
 
 } // namespace LindormContest

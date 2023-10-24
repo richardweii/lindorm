@@ -134,6 +134,7 @@ void MemTable::Reset() {
   }
   svid_col_->Reset();
   ts_col_->Reset();
+  in_flush_ = false;
 }
 
 void MemTable::GetLatestRow(uint16_t svid, const std::vector<int>& colids, Row& row) {

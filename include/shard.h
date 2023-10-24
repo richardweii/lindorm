@@ -30,6 +30,12 @@ public:
   template <typename TColumn>
   TColumn* FetchDataArr(BlockMeta* meta, int colid) {
     TColumn* res = dynamic_cast<TColumn*>(GetColumn(meta, colid));
+#ifdef ENABLE_STAT
+    RECORD_FETCH_ADD(cache_cnt, 1);
+    if (res != nullptr) {
+      RECORD_FETCH_ADD(cache_hit, 1);
+    }
+#endif
     if (res == nullptr) {
       res = new TColumn(colid);
       PutColumn(meta, colid, res);
@@ -96,7 +102,9 @@ private:
 
   ReadCache* read_cache_{nullptr}; // for read phase
 
-  MemTable* memtable_{nullptr}; // for write phase
+  MemTable* two_memtable_[2]{nullptr}; // 0 - 1 当一个在flush的时候使用另一个
+  uint8_t memtable_id{0};
+  MemTable* volatile memtable_{nullptr}; // for write phase
   AlignedWriteBuffer* write_buf_{nullptr};
 
   BlockMetaManager* block_mgr_{nullptr};

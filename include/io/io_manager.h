@@ -46,7 +46,7 @@ public:
     return file;
   }
 
-  File* OpenAsyncWriteFile(std::string filename) {
+  File* OpenAsyncWriteFile(std::string filename, int tid) {
     auto it = opened_files_.find(filename);
     if (it != opened_files_.cend()) {
       auto pFileOut = it->second;
@@ -54,12 +54,12 @@ public:
     }
 
     auto* file = new AsyncWriteFile(filename);
-    io_ctxs_.push_back(file->getAIOContext());
+    io_ctxs_[tid].push_back(file->getAIOContext());
     opened_files_.insert(std::make_pair(filename, file));
     return file;
   }
 
-  File* OpenAsyncReadFile(std::string filename) {
+  File* OpenAsyncReadFile(std::string filename, int tid) {
     auto it = opened_files_.find(filename);
     if (it != opened_files_.cend()) {
       auto pFileOut = it->second;
@@ -67,7 +67,7 @@ public:
     }
 
     auto* file = new AsyncRandomAccessFile(filename);
-    io_ctxs_.push_back(file->getAIOContext());
+    io_ctxs_[tid].push_back(file->getAIOContext());
     opened_files_.insert(std::make_pair(filename, file));
     return file;
   }
@@ -75,10 +75,11 @@ public:
   void PollingIOEvents() {
     timespec timeout = {0, 0};
     int ev_cnt = 0;
-    for (auto ioctx : io_ctxs_) {
-      if ((ev_cnt = io_getevents(*ioctx, 1, AsyncFile::kMaxIONum, events_, &timeout)) != 0) {
+    auto sched = this_coroutine::coro_scheduler()->tid();
+    for (auto ioctx : io_ctxs_[sched]) {
+      if ((ev_cnt = io_getevents(*ioctx, 1, AsyncFile::kMaxIONum, (io_event *)events_[sched], &timeout)) != 0) {
         for (int i = 0; i < ev_cnt; i++) {
-          AsyncFile::IOContext* io = reinterpret_cast<AsyncFile::IOContext*>(events_[i].data);
+          AsyncFile::IOContext* io = reinterpret_cast<AsyncFile::IOContext*>(events_[sched][i].data);
           AsyncFile::done(io);
         }
       }
@@ -94,8 +95,8 @@ public:
 
 private:
   RWLock rwlock;
-  io_event events_[AsyncFile::kMaxIONum];
-  std::vector<io_context_t*> io_ctxs_;
+  volatile io_event events_[AsyncFile::kMaxIONum][kWorkerThread];
+  std::vector<io_context_t*> io_ctxs_[kWorkerThread];
   std::unordered_map<std::string, File*> opened_files_;
 };
 

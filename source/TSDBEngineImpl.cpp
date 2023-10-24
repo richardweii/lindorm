@@ -74,6 +74,10 @@ void TSDBEngineImpl::loadSchema() {
 }
 
 int TSDBEngineImpl::connect() {
+  #ifdef ENABLE_STAT
+  cache_hit = 0;
+  cache_cnt = 0;
+  #endif
   io_mgr_ = new IOManager();
   for (int i = 0; i < kShardNum; i++) {
     shards_[i] = new ShardImpl(i, this);
@@ -86,9 +90,9 @@ int TSDBEngineImpl::connect() {
   File* shard_file = nullptr;
   for (int i = 0; i < kShardNum; i++) {
     if (new_db) {
-      shard_file = io_mgr_->OpenAsyncWriteFile(ShardDataFileName(dataDirPath, kTableName, i));
+      shard_file = io_mgr_->OpenAsyncWriteFile(ShardDataFileName(dataDirPath, kTableName, i), shard2tid(i));
     } else {
-      shard_file = io_mgr_->OpenAsyncReadFile(ShardDataFileName(dataDirPath, kTableName, i));
+      shard_file = io_mgr_->OpenAsyncReadFile(ShardDataFileName(dataDirPath, kTableName, i), shard2tid(i));
     }
     shards_[i]->Init(new_db, shard_file);
   }
@@ -198,10 +202,12 @@ int TSDBEngineImpl::shutdown() {
   LOG_INFO("Start flush memtable");
   WaitGroup wg(kShardNum);
   for (int i = 0; i < kShardNum; i++) {
-    coro_pool_->enqueue([&wg, this, i]() {
-      shards_[i]->Flush(true);
-      wg.Done();
-    });
+    coro_pool_->enqueue(
+      [&wg, this, i]() {
+        shards_[i]->Flush(true);
+        wg.Done();
+      },
+      shard2tid(i));
   }
   wg.Wait();
 
@@ -284,7 +290,7 @@ int TSDBEngineImpl::write(const WriteRequest& writeRequest) {
         shards_[shard]->Write(vid, row);
         inflight_write_.Done();
       },
-      shard % kWorkerThread);
+      shard2tid(shard));
   }
 
   return 0;
@@ -298,6 +304,7 @@ int TSDBEngineImpl::executeLatestQuery(const LatestQueryRequest& pReadReq, std::
   }
 
   WaitGroup wg(pReadReq.vins.size());
+  std::mutex mt;
   for (const auto& vin : pReadReq.vins) {
     uint16_t vid = getVidForRead(vin);
     if (vid == UINT16_MAX) {
@@ -306,13 +313,15 @@ int TSDBEngineImpl::executeLatestQuery(const LatestQueryRequest& pReadReq, std::
     }
     int shard = sharding(vid);
     coro_pool_->enqueue(
-      [this, shard, vid, &colids, &wg, &pReadRes]() {
+      [this, shard, vid, &colids, &wg, &pReadRes, &mt]() {
         Row row;
         shards_[shard]->GetLatestRow(vid, colids, row);
+        mt.lock();
         pReadRes.push_back(std::move(row));
+        mt.unlock();
         wg.Done();
       },
-      shard % kWorkerThread);
+      shard2tid(shard));
   }
   wg.Wait();
   return 0;
@@ -336,7 +345,7 @@ int TSDBEngineImpl::executeTimeRangeQuery(const TimeRangeQueryRequest& trReadReq
       shards_[shard]->GetRowsFromTimeRange(vid, trReadReq.timeLowerBound, trReadReq.timeUpperBound, colids, trReadRes);
       wg.Done();
     },
-    shard % kWorkerThread);
+    shard2tid(shard));
   wg.Wait();
   return 0;
 }

@@ -40,7 +40,7 @@ const std::string kIdxColName = "myidx";
 const std::string kTableName = "only_one"; // 目前就一张表，表名预留给复赛
 #else
 constexpr int kColumnNum = 20;
-constexpr int kVinNum = 1000;
+constexpr int kVinNum = 1024;
 constexpr int kShardBits = 4;
 // 按照vin进行分片的数量，最好保证和kVinNum是整除的关系，这样每个分片的vin数量是均匀的
 constexpr int kShardNum = 1 << kShardBits;
@@ -49,8 +49,8 @@ constexpr int kMemtableRowNum = 16 * 32;                    // 一个memtable里
 constexpr int kExtraColNum = 3;
 constexpr int kWriteBufferSize = 4 * KB;
 constexpr size_t kReadCacheSize = 16 * KB;
-constexpr int kWorkerThread = 1;
-constexpr int kCoroutinePerThread = 1;
+constexpr int kWorkerThread = 8;
+constexpr int kCoroutinePerThread = 16;
 constexpr size_t kMemoryPoolSz = 1 * 1024 * MB; // 1GB临时内存
 
 const std::string kVidColName = "myvid";
@@ -63,6 +63,11 @@ const std::string kTableName = "only_one"; // 目前就一张表，表名预留�
 static inline int sharding(uint16_t vid) {
   LOG_ASSERT(vid < kVinNum, "vid = %d", vid);
   return vid % kShardNum;
+}
+
+static inline int shard2tid(uint16_t shard) {
+  LOG_ASSERT(shard < kShardNum, "shard = %d", shard);
+  return shard % kWorkerThread;
 }
 
 // vid -->  shard 内序号
