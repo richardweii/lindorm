@@ -15,9 +15,11 @@ class ReadCache {
 public:
   struct Col {
     BlockMeta* ptr{nullptr};
-    int colid{};
     ColumnArrWrapper* column_arr{nullptr};
-
+    uint8_t colid{};
+    uint8_t ref{0};      // 只用做delete 的引用计数
+    bool filling{false}; // 表示这个col正在填充数据，还不能被访问
+    CoroCV cv_;
     std::size_t operator()(const Col& key) const {
       return std::hash<uint64_t>()(reinterpret_cast<uint64_t>(key.ptr)) ^ std::hash<int>()(key.colid);
     }
@@ -28,29 +30,29 @@ public:
   ReadCache(size_t max_sz) : max_sz_(max_sz) {}
 
   template <typename TColumn>
-  TColumn* FetchDataArr(BlockMeta* meta, int colid) {
-    TColumn* res = dynamic_cast<TColumn*>(GetColumn(meta, colid));
-#ifdef ENABLE_STAT
-    RECORD_FETCH_ADD(cache_cnt, 1);
-    if (res != nullptr) {
-      RECORD_FETCH_ADD(cache_hit, 1);
-    }
-#endif
+  TColumn* FetchDataArr(BlockMeta* meta, uint8_t colid, bool& hit) {
+    ColumnArrWrapper* res = GetColumn(meta, colid);
+    hit = true;
     if (res == nullptr) {
+      hit = false;
       res = new TColumn(colid);
       PutColumn(meta, colid, res);
     }
-    return res;
+    return dynamic_cast<TColumn*>(res);
   };
 
-  Status PutColumn(BlockMeta* meta, int colid, ColumnArrWrapper* col_data);
+  Status PutColumn(BlockMeta* meta, uint8_t colid, ColumnArrWrapper* col_data);
 
-  ColumnArrWrapper* GetColumn(BlockMeta* meta, int colid);
+  ColumnArrWrapper* GetColumn(BlockMeta* meta, uint8_t colid);
+
+  void Release(BlockMeta* meta, uint8_t colid, ColumnArrWrapper* data);
 
 private:
   // LRU cache
   std::unordered_map<Col, std::list<Col>::iterator, Col> cache_;
   std::list<Col> lru_list_;
+
+  void moveToRefList(const Col& key);
   void updateList(const Col& key);
 
   size_t total_sz_{0};     // 内存用量

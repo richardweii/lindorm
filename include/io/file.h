@@ -163,6 +163,16 @@ public:
     }
   }
 
+  virtual Status async_write(const char* buf, size_t length) {
+    LOG_ASSERT(false, "Not implemented");
+    return Status::NotSupported;
+  };
+
+  virtual Status async_read(char* res_buf, size_t length, off_t pos) {
+    LOG_ASSERT(false, "Not implemented");
+    return Status::NotSupported;
+  }
+
   virtual ~AsyncFile() { io_destroy(ctx_); }
 
   static void done(IOContext* ioctx) {
@@ -196,6 +206,13 @@ public:
 
   // NOT THREAD-SAFE，上层需要保证buf、len、offset都是512对齐的
   Status write(const char* buf, size_t length) override {
+    auto rc = async_write(buf, length);
+    this_coroutine::co_wait();
+    return rc;
+  }
+
+  // NOT THREAD-SAFE，上层需要保证buf、len、offset都是512对齐的
+  Status async_write(const char* buf, size_t length) override {
     ENSURE(inflight_ >= 0 && inflight_ < kMaxIONum, "too many parallel write");
     ENSURE((length & 511) == 0, "invalid length.");
     ENSURE(((uint64_t)buf & 511) == 0, "invalid buf address.");
@@ -214,7 +231,6 @@ public:
 
     file_sz_ += length;
     inflight_++;
-    this_coroutine::co_wait();
     return Status::OK;
   }
 };
@@ -234,6 +250,13 @@ public:
 
   // NOT THREAD-SAFE，上层需要保证buf、len、offset都是512对齐的
   Status read(char* res_buf, size_t length, off_t pos) override {
+    auto rc = async_read(res_buf, length, pos);
+    this_coroutine::co_wait();
+    return Status::OK;
+  }
+
+  // NOT THREAD-SAFE，上层需要保证buf、len、offset都是512对齐的
+  Status async_read(char* res_buf, size_t length, off_t pos) override {
     ENSURE(inflight_ >= 0 && inflight_ < kMaxIONum, "too many parallel read");
     ENSURE((length & 511) == 0, "invalid length.");
     ENSURE(((uint64_t)res_buf & 511) == 0, "invalid res_buf.");
@@ -252,7 +275,6 @@ public:
     ENSURE(ret == 1, "io_submit failed");
 
     inflight_++;
-    this_coroutine::co_wait();
     return Status::OK;
   }
 };

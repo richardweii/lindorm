@@ -95,7 +95,7 @@ public:
 
 private:
   RWLock rwlock;
-  volatile io_event events_[AsyncFile::kMaxIONum][kWorkerThread];
+  volatile io_event events_[kWorkerThread][AsyncFile::kMaxIONum];
   std::vector<io_context_t*> io_ctxs_[kWorkerThread];
   std::unordered_map<std::string, File*> opened_files_;
 };

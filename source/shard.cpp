@@ -4,7 +4,7 @@
 
 namespace LindormContest {
 
-Status ReadCache::PutColumn(BlockMeta* meta, int colid, ColumnArrWrapper* col_data) {
+Status ReadCache::PutColumn(BlockMeta* meta, uint8_t colid, ColumnArrWrapper* col_data) {
   Col key = {.ptr = meta, .colid = colid};
   LOG_ASSERT(col_data->TotalSize() <= max_sz_, "ColumnArrWrapper is too big.");
 
@@ -12,29 +12,47 @@ Status ReadCache::PutColumn(BlockMeta* meta, int colid, ColumnArrWrapper* col_da
     // 缓存已满
     auto victim = lru_list_.back();
     auto sz = victim.column_arr->TotalSize();
-    delete victim.column_arr;
+    if (victim.ref == 0) {
+      delete victim.column_arr; // TODO: 这里有安全隐患，有可能get的指针在被用
+    }
     total_sz_ -= sz;
     lru_list_.pop_back();
     cache_.erase(victim);
   }
 
   // 插入新元素到缓存和链表头部
+  total_sz_ += col_data->TotalSize();
   lru_list_.push_front(key);
   cache_[key] = lru_list_.begin();
   cache_[key]->column_arr = col_data;
+  cache_[key]->ref = 1;
+  cache_[key]->filling = true;
   return Status::OK;
 }
 
-ColumnArrWrapper* ReadCache::GetColumn(BlockMeta* meta, int colid) {
+ColumnArrWrapper* ReadCache::GetColumn(BlockMeta* meta, uint8_t colid) {
+  RECORD_FETCH_ADD(cache_cnt, 1);
   Col key = {.ptr = meta, .colid = colid};
   auto iter = cache_.find(key);
   if (iter == cache_.end()) {
     return nullptr;
   }
 
+  RECORD_FETCH_ADD(cache_hit, 1);
   updateList(*iter->second);
-
+  cache_[key]->ref++;
   return cache_[key]->column_arr;
+};
+
+void ReadCache::Release(BlockMeta* meta, uint8_t colid, ColumnArrWrapper* data) {
+  Col key = {.ptr = meta, .colid = colid};
+  auto iter = cache_.find(key);
+  if (iter == cache_.end()) {
+    // 已经被LRU逐出了
+    delete data;
+    return;
+  }
+  iter->second->ref--;
 };
 
 void ReadCache::updateList(const Col& key) {
@@ -229,11 +247,22 @@ void ShardImpl::GetRowsFromTimeRange(uint64_t vid, int64_t lowerInclusive, int64
 
   if (!blk_metas.empty()) {
     RECORD_FETCH_ADD(tr_disk_blk_query_cnt, blk_metas.size());
+    std::vector<ColumnArrWrapper*> need_read_from_file;
+    std::vector<char*> tmp_bufs;
     for (auto blk_meta : blk_metas) {
       // 去读对应列的block
-      VidArrWrapper* tmp_vid_col = read_cache_->FetchDataArr<VidArrWrapper>(blk_meta, kColumnNum);
-      TsArrWrapper* tmp_ts_col = read_cache_->FetchDataArr<TsArrWrapper>(blk_meta, kColumnNum + 1);
-      IdxArrWrapper* tmp_idx_col = read_cache_->FetchDataArr<IdxArrWrapper>(blk_meta, kColumnNum + 2);
+      need_read_from_file.clear();
+      tmp_bufs.clear();
+
+      bool hit;
+      VidArrWrapper* tmp_vid_col = read_cache_->FetchDataArr<VidArrWrapper>(blk_meta, kColumnNum, hit);
+      if (!hit) need_read_from_file.push_back(tmp_vid_col);
+
+      TsArrWrapper* tmp_ts_col = read_cache_->FetchDataArr<TsArrWrapper>(blk_meta, kColumnNum + 1, hit);
+      if (!hit) need_read_from_file.push_back(tmp_ts_col);
+
+      IdxArrWrapper* tmp_idx_col = read_cache_->FetchDataArr<IdxArrWrapper>(blk_meta, kColumnNum + 2, hit);
+      if (!hit) need_read_from_file.push_back(tmp_idx_col);
 
       ColumnArrWrapper* cols[colids.size()];
 
@@ -241,24 +270,47 @@ void ShardImpl::GetRowsFromTimeRange(uint64_t vid, int64_t lowerInclusive, int64
       for (const auto col_id : colids) {
         switch (engine_->columns_type_[col_id]) {
           case COLUMN_TYPE_STRING:
-            cols[icol_idx] = read_cache_->FetchDataArr<StringArrWrapper>(blk_meta, col_id);
+            cols[icol_idx] = read_cache_->FetchDataArr<StringArrWrapper>(blk_meta, col_id, hit);
+            if (!hit) need_read_from_file.push_back(cols[icol_idx]);
             break;
           case COLUMN_TYPE_INTEGER:
-            cols[icol_idx] = read_cache_->FetchDataArr<IntArrWrapper>(blk_meta, col_id);
+            cols[icol_idx] = read_cache_->FetchDataArr<IntArrWrapper>(blk_meta, col_id, hit);
+            if (!hit) need_read_from_file.push_back(cols[icol_idx]);
             break;
           case COLUMN_TYPE_DOUBLE_FLOAT:
-            cols[icol_idx] = read_cache_->FetchDataArr<DoubleArrWrapper>(blk_meta, col_id);
+            cols[icol_idx] = read_cache_->FetchDataArr<DoubleArrWrapper>(blk_meta, col_id, hit);
+            if (!hit) need_read_from_file.push_back(cols[icol_idx]);
             break;
           case COLUMN_TYPE_UNINITIALIZED:
             LOG_ASSERT(false, "error");
             break;
         }
-        cols[icol_idx++]->Read(rfile, write_buf_, blk_meta);
+        icol_idx++;
       }
-      tmp_vid_col->Read(rfile, write_buf_, blk_meta);
-      tmp_ts_col->Read(rfile, write_buf_, blk_meta);
-      tmp_idx_col->Read(rfile, write_buf_, blk_meta);
 
+      if (UNLIKELY(write_phase_)) {
+        for (auto& col : need_read_from_file) {
+          // 异步非Batch IO
+          col->Read(rfile, write_buf_, blk_meta);
+        }
+      } else {
+        AsyncFile* async_rf = dynamic_cast<AsyncFile*>(rfile);
+        LOG_ASSERT(async_rf != nullptr, "invalid cast");
+
+        // 同时下发多个异步读IO
+        for (auto& col : need_read_from_file) {
+          // 储存用于异步IO的buf
+          tmp_bufs.push_back(col->AsyncReadCompressed(async_rf, blk_meta));
+        }
+
+        this_coroutine::co_wait(need_read_from_file.size());
+
+        int i = 0;
+        for (auto& col : need_read_from_file) {
+          col->Decompressed(tmp_bufs[i], blk_meta);
+          i++;
+        }
+      }
       // 现在vid + ts是有序的，可以直接应用二分查找
       std::vector<uint16_t> idxs;
       std::vector<int64_t> tss;
@@ -278,6 +330,13 @@ void ShardImpl::GetRowsFromTimeRange(uint64_t vid, int64_t lowerInclusive, int64
           }
           results.push_back(std::move(resultRow));
         }
+      }
+
+      read_cache_->Release(blk_meta, kColumnNum, tmp_vid_col);
+      read_cache_->Release(blk_meta, kColumnNum + 1, tmp_ts_col);
+      read_cache_->Release(blk_meta, kColumnNum + 2, tmp_idx_col);
+      for (size_t i = 0; i < colids.size(); i++) {
+        read_cache_->Release(blk_meta, colids[i], cols[i]);
       }
     }
   }

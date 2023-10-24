@@ -112,6 +112,38 @@ public:
     BuddyThreadHeap::get_instance()->free_local(buf);
   }
 
+  char* AsyncReadCompressed(AsyncFile* file, BlockMeta* meta) {
+    LOG_ASSERT(meta != nullptr, "error");
+
+    // buf 和offset 的按512字节对齐
+    uint64_t offset = meta->offset[col_id_];
+    size_t compress_sz = meta->compress_sz[col_id_];
+
+    uint64_t file_read_off = rounddown512(meta->offset[col_id_]);                                 // offset对齐
+    size_t compressed_buf_sz = roundup512(meta->compress_sz[col_id_] + (offset - file_read_off)); // 预留足够的空间
+    auto buf = reinterpret_cast<char*>(BuddyThreadHeap::get_instance()->alloc(compressed_buf_sz));
+    char* compressed_data = buf;
+
+    struct stat st;
+    fstat(file->fd(), &st);
+    LOG_ASSERT(offset + compress_sz <= (uint64_t)st.st_size, "offset %lu read size %lu filesz %lu", offset, compress_sz,
+               st.st_size);
+    file->async_read(compressed_data, compressed_buf_sz, file_read_off);
+    return buf;
+  }
+
+  void Decompressed(char* data_buf, BlockMeta* meta) {
+    char* compressed_data = data_buf;
+    uint64_t offset = meta->offset[col_id_];
+    uint64_t file_read_off = rounddown512(meta->offset[col_id_]); // offset对齐
+    size_t compress_sz = meta->compress_sz[col_id_];
+
+    compressed_data += (offset - file_read_off); // 偏移修正
+    auto ret = decompress_func(compressed_data, (char*)data_, compress_sz, meta->origin_sz[col_id_]);
+    LOG_ASSERT(ret == (int)meta->origin_sz[col_id_], "uncompress error");
+    BuddyThreadHeap::get_instance()->free_local(data_buf);
+  }
+
   void Get(int idx, ColumnValue& value) {
     switch (type_) {
       case COLUMN_TYPE_STRING:
@@ -145,6 +177,8 @@ public:
   }
 
   int64_t GetVal(int idx) { return data_[idx]; }
+
+  size_t TotalSize() const { return sizeof(T) * kMemtableRowNum; }
 
   void Reset(){};
 
@@ -259,6 +293,56 @@ public:
     BuddyThreadHeap::get_instance()->free_local(origin_buf);
   }
 
+  // 可以考虑减少一次拷贝
+  char* AsyncReadCompressed(AsyncFile* file, BlockMeta* meta) {
+    LOG_ASSERT(meta != nullptr, "error");
+
+    uint64_t offset = meta->offset[col_id_];
+    size_t compress_sz = meta->compress_sz[col_id_];
+
+    uint64_t file_read_off = rounddown512(meta->offset[col_id_]);                                 // offset对齐
+    size_t compressed_buf_sz = roundup512(meta->compress_sz[col_id_] + (offset - file_read_off)); // 预留足够的空间
+
+    char* compress_buf = reinterpret_cast<char*>(BuddyThreadHeap::get_instance()->alloc(compressed_buf_sz));
+    char* compress_data = compress_buf;
+
+    // 全部在文件里面
+    struct stat st;
+    fstat(file->fd(), &st);
+    LOG_ASSERT(offset + compress_sz <= (uint64_t)st.st_size, "offset %lu read size %lu filesz %lu", offset, compress_sz,
+               st.st_size);
+
+    file->async_read(compress_data, compressed_buf_sz, file_read_off);
+    return compress_buf;
+  }
+
+  void Decompressed(char* data_buf, BlockMeta* meta) {
+    uint64_t offset = meta->offset[col_id_];
+    uint64_t file_read_off = rounddown512(meta->offset[col_id_]); // offset对齐
+    size_t compress_sz = meta->compress_sz[col_id_];
+
+    size_t origin_buf_sz = meta->origin_sz[col_id_];
+    char* origin_buf = reinterpret_cast<char*>(BuddyThreadHeap::get_instance()->alloc(origin_buf_sz));
+
+    char* compress_data = data_buf;
+
+    compress_data += (offset - file_read_off); // 偏移修正
+    auto ret = decompress_func(compress_data, origin_buf, compress_sz, origin_buf_sz);
+    LOG_ASSERT(ret == (int)origin_buf_sz, "uncompress error");
+
+    memcpy(lens_, origin_buf, sizeof(lens_[0]) * (meta->num));
+    data_ = std::string(origin_buf + sizeof(lens_[0]) * (meta->num), origin_buf_sz - sizeof(lens_[0]) * meta->num);
+
+    offset = 0;
+    for (int i = 0; i < meta->num; i++) {
+      offset += lens_[i];
+      offsets_[i + 1] = offset;
+    }
+
+    BuddyThreadHeap::get_instance()->free_local(data_buf);
+    BuddyThreadHeap::get_instance()->free_local(origin_buf);
+  }
+
   void Get(int idx, ColumnValue& value) {
     free(value.columnData);
     uint32_t off = offsets_[idx];
@@ -281,6 +365,8 @@ public:
 
   const int col_id_;
 
+  size_t TotalSize() const { return sizeof(uint16_t) * kMemtableRowNum + data_.size(); }
+
 private:
   uint32_t offset_;
   uint32_t offsets_[kMemtableRowNum + 1];
@@ -297,6 +383,10 @@ public:
   virtual void Flush(AlignedWriteBuffer* buffer, int cnt, BlockMeta* meta) = 0;
 
   virtual void Read(File* file, AlignedWriteBuffer* buffer, BlockMeta* meta) = 0;
+
+  virtual char* AsyncReadCompressed(AsyncFile* file, BlockMeta* meta) = 0;
+
+  virtual void Decompressed(char* data_buf, BlockMeta* meta) = 0;
 
   virtual void Get(int idx, ColumnValue& value) = 0;
 
@@ -321,6 +411,10 @@ public:
 
   void Read(File* file, AlignedWriteBuffer* buffer, BlockMeta* meta) override { arr->Read(file, buffer, meta); }
 
+  char* AsyncReadCompressed(AsyncFile* file, BlockMeta* meta) override { return arr->AsyncReadCompressed(file, meta); };
+
+  void Decompressed(char* data_buf, BlockMeta* meta) override { arr->Decompressed(data_buf, meta); };
+
   void Get(int idx, ColumnValue& value) override { arr->Get(idx, value); }
 
   int64_t GetVal(int idx) override { return arr->GetVal(idx); }
@@ -329,7 +423,7 @@ public:
 
   int GetColid() override { return arr->col_id_; }
 
-  size_t TotalSize() override { return 0; }
+  size_t TotalSize() override { return arr->TotalSize(); }
 
 private:
   ColumnArr<int>* arr;
@@ -347,6 +441,10 @@ public:
 
   void Read(File* file, AlignedWriteBuffer* buffer, BlockMeta* meta) override { arr->Read(file, buffer, meta); }
 
+  char* AsyncReadCompressed(AsyncFile* file, BlockMeta* meta) override { return arr->AsyncReadCompressed(file, meta); };
+
+  void Decompressed(char* data_buf, BlockMeta* meta) override { arr->Decompressed(data_buf, meta); };
+
   void Get(int idx, ColumnValue& value) override { arr->Get(idx, value); }
 
   int64_t GetVal(int idx) override { return arr->GetVal(idx); }
@@ -355,7 +453,7 @@ public:
 
   int GetColid() override { return arr->col_id_; }
 
-  size_t TotalSize() override { return 0; }
+  size_t TotalSize() override { return arr->TotalSize(); }
 
 private:
   ColumnArr<double>* arr;
@@ -373,6 +471,10 @@ public:
 
   void Read(File* file, AlignedWriteBuffer* buffer, BlockMeta* meta) override { arr->Read(file, buffer, meta); }
 
+  char* AsyncReadCompressed(AsyncFile* file, BlockMeta* meta) override { return arr->AsyncReadCompressed(file, meta); };
+
+  void Decompressed(char* data_buf, BlockMeta* meta) override { arr->Decompressed(data_buf, meta); };
+
   void Get(int idx, ColumnValue& value) override { arr->Get(idx, value); }
 
   int64_t GetVal(int idx) override {
@@ -384,7 +486,7 @@ public:
 
   int GetColid() override { return arr->col_id_; }
 
-  size_t TotalSize() override { return 0; }
+  size_t TotalSize() override { return arr->TotalSize(); }
 
 private:
   ColumnArr<std::string>* arr;
@@ -402,6 +504,10 @@ public:
 
   void Read(File* file, AlignedWriteBuffer* buffer, BlockMeta* meta) override { arr->Read(file, buffer, meta); }
 
+  char* AsyncReadCompressed(AsyncFile* file, BlockMeta* meta) override { return arr->AsyncReadCompressed(file, meta); };
+
+  void Decompressed(char* data_buf, BlockMeta* meta) override { arr->Decompressed(data_buf, meta); };
+
   void Get(int idx, ColumnValue& value) override { arr->Get(idx, value); }
 
   int64_t GetVal(int idx) override { return arr->GetVal(idx); }
@@ -412,7 +518,7 @@ public:
 
   uint16_t* GetDataArr() { return arr->data_; }
 
-  size_t TotalSize() override { return 0; }
+  size_t TotalSize() override { return arr->TotalSize(); }
 
 private:
   ColumnArr<uint16_t>* arr;
@@ -430,6 +536,10 @@ public:
 
   void Read(File* file, AlignedWriteBuffer* buffer, BlockMeta* meta) override { arr->Read(file, buffer, meta); }
 
+  char* AsyncReadCompressed(AsyncFile* file, BlockMeta* meta) override { return arr->AsyncReadCompressed(file, meta); };
+
+  void Decompressed(char* data_buf, BlockMeta* meta) override { arr->Decompressed(data_buf, meta); };
+
   void Get(int idx, ColumnValue& value) override { arr->Get(idx, value); }
 
   int64_t GetVal(int idx) override { return arr->GetVal(idx); }
@@ -440,7 +550,7 @@ public:
 
   int64_t* GetDataArr() { return arr->data_; }
 
-  size_t TotalSize() override { return 0; }
+  size_t TotalSize() override { return arr->TotalSize(); }
 
 private:
   ColumnArr<int64_t>* arr;
@@ -458,6 +568,10 @@ public:
 
   void Read(File* file, AlignedWriteBuffer* buffer, BlockMeta* meta) override { arr->Read(file, buffer, meta); }
 
+  char* AsyncReadCompressed(AsyncFile* file, BlockMeta* meta) override { return arr->AsyncReadCompressed(file, meta); };
+
+  void Decompressed(char* data_buf, BlockMeta* meta) override { arr->Decompressed(data_buf, meta); };
+
   void Get(int idx, ColumnValue& value) override { arr->Get(idx, value); }
 
   int64_t GetVal(int idx) override { return arr->GetVal(idx); }
@@ -468,7 +582,7 @@ public:
 
   uint16_t* GetDataArr() { return arr->data_; }
 
-  size_t TotalSize() override { return 0; }
+  size_t TotalSize() override { return arr->TotalSize(); }
 
 private:
   ColumnArr<uint16_t>* arr;
