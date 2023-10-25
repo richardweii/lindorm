@@ -25,6 +25,12 @@ Scheduler::Scheduler(int coroutine_num, int tid) : Coroutine(-1, this), coro_num
 Scheduler::~Scheduler() { delete[] wakeup_buf_; }
 
 void Scheduler::scheduling() {
+  // 绑核
+  cpu_set_t cpuset;
+  CPU_ZERO(&cpuset);
+  CPU_SET(tid_, &cpuset);
+  pthread_setaffinity_np(pthread_self(), sizeof(cpu_set_t), &cpuset);
+
   scheduler = this;
   while (!(stop && runnable_list_.empty() && waiting_list_.empty())) {
     if (UNLIKELY(runnable_list_.empty())) {

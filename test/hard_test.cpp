@@ -110,6 +110,16 @@ static bool RowEquals(const LindormContest::Row& a, const LindormContest::Row& b
   return true;
 }
 
+// 让测试程序只使用前8个核心
+void bind_cores() {
+  cpu_set_t cpuset;
+  CPU_ZERO(&cpuset);
+  for (int i = 0; i < 8; i++) {
+    CPU_SET(i, &cpuset); // 设置要使用的核心编号
+  }
+  pthread_setaffinity_np(pthread_self(), sizeof(cpu_set_t), &cpuset);
+}
+
 char* randstr(char* str, const int len) {
   srand(time(NULL));
   int i;
@@ -216,6 +226,7 @@ void parallel_upsert(LindormContest::TSDBEngine* engine) {
   for (int t = 0; t < thread_num; t++) {
     threads.emplace_back(
       [&is, &js, engine](int th) {
+        bind_cores();
         for (int j = 0; j < kRowsPerVin; j++) {
           for (int i = th * per_thread_vin_num; i < (th + 1) * per_thread_vin_num;) {
             LindormContest::WriteRequest wReq;
@@ -249,6 +260,7 @@ void parallel_test_latest(LindormContest::TSDBEngine* engine) {
   Progress pgrs(kVinNum);
   for (int t = 0; t < thread_num; t++) {
     threads.emplace_back([t, engine, &pgrs]() {
+      bind_cores();
       for (int i = t * per_thread_vin_num; i < (t + 1) * per_thread_vin_num; i++) {
         LindormContest::LatestQueryRequest pReadReq;
         std::vector<LindormContest::Row> pReadRes;
@@ -289,6 +301,7 @@ void parallel_test_time_range(LindormContest::TSDBEngine* engine) {
   Progress pgrs(kVinNum);
   for (int t = 0; t < thread_num; t++) {
     threads.emplace_back([t, engine, &pgrs]() {
+      bind_cores();
       for (int i = t * per_thread_vin_num; i < (t + 1) * per_thread_vin_num; i++) {
         LindormContest::TimeRangeQueryRequest trR;
         LindormContest::Vin vin;
