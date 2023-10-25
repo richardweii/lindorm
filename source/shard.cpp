@@ -10,11 +10,13 @@ Status ReadCache::PutColumn(BlockMeta* meta, uint8_t colid, ColumnArrWrapper* co
 
   while (total_sz_ + col_data->TotalSize() >= max_sz_) {
     // 缓存已满
+    while (lru_list_.empty()) {
+      lru_cv_.wait(); // 等别人Release了才能进行LRU剔除
+    }
     auto victim = lru_list_.back();
     auto sz = victim.column_arr->TotalSize();
-    if (victim.ref == 0) {
-      delete victim.column_arr; // TODO: 这里有安全隐患，有可能get的指针在被用
-    }
+    LOG_ASSERT(victim.ref == 0, "someone are using this.");
+    delete victim.column_arr;
     total_sz_ -= sz;
     lru_list_.pop_back();
     cache_.erase(victim);
@@ -22,8 +24,8 @@ Status ReadCache::PutColumn(BlockMeta* meta, uint8_t colid, ColumnArrWrapper* co
 
   // 插入新元素到缓存和链表头部
   total_sz_ += col_data->TotalSize();
-  lru_list_.push_front(key);
-  cache_[key] = lru_list_.begin();
+  prepared_list_.push_front(key);
+  cache_[key] = prepared_list_.begin();
   cache_[key]->column_arr = col_data;
   cache_[key]->ref = 1;
   cache_[key]->filling = true;
@@ -39,29 +41,36 @@ ColumnArrWrapper* ReadCache::GetColumn(BlockMeta* meta, uint8_t colid) {
   }
 
   RECORD_FETCH_ADD(cache_hit, 1);
-  updateList(*iter->second);
+  if (cache_[key]->ref == 0) {
+    lru2ref(*iter->second);
+  }
   cache_[key]->ref++;
+  while (cache_[key]->filling) {
+    singleflight_cv_.wait(); // 要读取的数据在缓存中，但是其他协程正在填充数据
+  }
+
   return cache_[key]->column_arr;
 };
 
 void ReadCache::Release(BlockMeta* meta, uint8_t colid, ColumnArrWrapper* data) {
   Col key = {.ptr = meta, .colid = colid};
   auto iter = cache_.find(key);
-  if (iter == cache_.end()) {
-    // 已经被LRU逐出了
-    delete data;
-    return;
+  LOG_ASSERT(iter != cache_.end(), "referenced data should not be invalid");
+  auto &node = iter->second;
+  node->ref--;
+  if (node->filling) {
+    node->filling = false;
+    prepared2ref(*node);
+    if (node->ref > 0) {
+      singleflight_cv_.notify(); // 唤醒其他等数据的协程
+    }
   }
-  iter->second->ref--;
-};
 
-void ReadCache::updateList(const Col& key) {
-  // 移除原来位置的元素，插入到链表头部
-  LOG_ASSERT(key.column_arr != nullptr, "empty node");
-  lru_list_.erase(cache_[key]);
-  lru_list_.push_front(key);
-  cache_[key] = lru_list_.begin();
-}
+  if(node->ref == 0) {
+    ref2lru(*node);
+    lru_cv_.notify(); // 唤醒LRU协程
+  }
+};
 
 void ShardImpl::Init(bool write_phase, File* data_file) {
   data_file_ = data_file;

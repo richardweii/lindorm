@@ -243,7 +243,7 @@ void parallel_test_latest(LindormContest::TSDBEngine* engine) {
   LOG_INFO("start parallel test latest...");
   // validate executeLatestQuery
   std::vector<std::thread> threads;
-  const int thread_num = 32;
+  const int thread_num = 16;
   const int per_thread_vin_num = kVinNum / thread_num;
 
   Progress pgrs(kVinNum);

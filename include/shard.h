@@ -17,9 +17,8 @@ public:
     BlockMeta* ptr{nullptr};
     ColumnArrWrapper* column_arr{nullptr};
     uint8_t colid{};
-    uint8_t ref{0};      // 只用做delete 的引用计数
-    bool filling{false}; // 表示这个col正在填充数据，还不能被访问
-    CoroCV cv_;
+    uint8_t ref{0};               // 只用做delete 的引用计数
+    volatile bool filling{false}; // 表示这个col正在填充数据，还不能被访问
     std::size_t operator()(const Col& key) const {
       return std::hash<uint64_t>()(reinterpret_cast<uint64_t>(key.ptr)) ^ std::hash<int>()(key.colid);
     }
@@ -50,11 +49,33 @@ public:
 private:
   // LRU cache
   std::unordered_map<Col, std::list<Col>::iterator, Col> cache_;
-  std::list<Col> lru_list_;
+  std::list<Col> lru_list_;      // 可以evict进行剔除
+  std::list<Col> ref_list_;      // 正在被引用
+  std::list<Col> prepared_list_; // 刚创建还在被某个协程填充数据
 
-  void moveToRefList(const Col& key);
-  void updateList(const Col& key);
+  void moveNode(const Col& node, std::list<Col>& from, std::list<Col>& to) {
+    from.erase(cache_[node]);
+    to.push_front(node);
+    cache_[node] = to.begin();
+  }
 
+  void lru2ref(const Col& node) {
+    // 从LRU链中首次被ref
+    moveNode(node, lru_list_, ref_list_);
+  };
+
+  void prepared2ref(const Col& node) {
+    // 结束数据填充，且有人在等，放入REF链
+    moveNode(node, prepared_list_, ref_list_);
+  }
+
+  void ref2lru(const Col& node) {
+    // 没有其他人引用了，可以放入LRU链
+    moveNode(node, ref_list_, lru_list_);
+  }
+
+  CoroCV lru_cv_;          // 等LRU
+  CoroCV singleflight_cv_; // 等数据
   size_t total_sz_{0};     // 内存用量
   const size_t max_sz_{0}; // cache上限量
 };
