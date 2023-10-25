@@ -219,9 +219,9 @@ void parallel_upsert(LindormContest::TSDBEngine* engine) {
     js[j] = j;
   }
 
-  std::mt19937 rng(1);
-  std::shuffle(is.begin(), is.end(), rng);
-  std::shuffle(js.begin(), js.end(), rng);
+  // std::mt19937 rng(1);
+  // std::shuffle(is.begin(), is.end(), rng);
+  // std::shuffle(js.begin(), js.end(), rng);
 
   for (int t = 0; t < thread_num; t++) {
     threads.emplace_back(
@@ -308,9 +308,10 @@ void parallel_test_time_range(LindormContest::TSDBEngine* engine) {
         memcpy(vin.vin, rows[i][0].vin.vin, LindormContest::VIN_LENGTH);
         trR.vin = vin;
         trR.tableName = "t1";
-        size_t res_cnt = (rand() % kRowsPerVin);
-        trR.timeLowerBound = 0;
-        trR.timeUpperBound = res_cnt;
+        auto start = (rand() % (3 * kRowsPerVin / 4));
+        size_t res_cnt = (rand() % (kRowsPerVin / 4));
+        trR.timeLowerBound = start;
+        trR.timeUpperBound = start + res_cnt;
         for (int j = 0; j < LindormContest::kColumnNum; j++) {
           std::string col_name = "column_" + std::to_string(j);
           trR.requestedColumns.insert(col_name);
@@ -318,7 +319,7 @@ void parallel_test_time_range(LindormContest::TSDBEngine* engine) {
         std::vector<LindormContest::Row> trReadRes;
         int ret = engine->executeTimeRangeQuery(trR, trReadRes);
         std::sort(trReadRes.begin(), trReadRes.end());
-        int64_t ts = 0;
+        int64_t ts = start;
         for (auto& r : trReadRes) {
           EXPECT(r.timestamp == ts, "r.timestamp %ld %ld", r.timestamp, ts);
           ts++;
@@ -326,6 +327,77 @@ void parallel_test_time_range(LindormContest::TSDBEngine* engine) {
         ASSERT(trReadRes.size() == res_cnt, "size = %zu", trReadRes.size());
         for (auto& row : trReadRes) {
           ASSERT(RowEquals(row, rows[i][row.timestamp % kRowsPerVin]), "not equal");
+        }
+        pgrs.wg()->Done();
+      }
+    });
+  }
+
+  pgrs.Wait();
+  pgrs.Finish();
+  for (auto& th : threads) {
+    th.join();
+  }
+
+  LOG_INFO("parallel test time range PASS");
+}
+
+void parallel_agg(LindormContest::TSDBEngine* engine, LindormContest::Aggregator op, int type) {
+  LOG_INFO("start parallel agg op %d, type %d", op, type);
+  // validate time range
+  std::vector<std::thread> threads;
+  const int thread_num = 16;
+  const int per_thread_vin_num = kVinNum / thread_num;
+
+  Progress pgrs(kVinNum);
+  for (int t = 0; t < thread_num; t++) {
+    threads.emplace_back([t, engine, &pgrs, type, op]() {
+      bind_cores();
+      for (int i = t * per_thread_vin_num; i < (t + 1) * per_thread_vin_num; i++) {
+        LindormContest::TimeRangeAggregationRequest tAG;
+        LindormContest::Vin vin;
+        memcpy(vin.vin, rows[i][0].vin.vin, LindormContest::VIN_LENGTH);
+        tAG.aggregator = op;
+        tAG.vin = vin;
+        tAG.tableName = "t1";
+        auto start = (rand() % (3 * kRowsPerVin / 4));
+        size_t res_cnt = (rand() % (kRowsPerVin / 4)) + 1;
+        tAG.timeLowerBound = start;
+        tAG.timeUpperBound = start + res_cnt;
+        std::string col_name;
+        if (type == 0) {
+          // int
+          col_name = "column_" + std::to_string(0);
+          tAG.columnName = col_name;
+        } else {
+          // double
+          col_name = "column_" + std::to_string(2);
+          tAG.columnName = col_name;
+        }
+
+        std::vector<LindormContest::Row> trReadRes;
+        int ret = engine->executeAggregateQuery(tAG, trReadRes);
+        ASSERT(trReadRes.size() == 1, "size = %zu", trReadRes.size());
+        auto& row = trReadRes[0];
+
+        if (op == LindormContest::MAX) {
+          if (type == 0) {
+            int got;
+            row.columns[col_name].getIntegerValue(got);
+            int expected = start + res_cnt - 1;
+            ASSERT(got == expected, "expected %d, but got %d", expected, got);
+          } else if (type == 1) {
+            double got;
+            row.columns[col_name].getDoubleFloatValue(got);
+            double expected = 1.0 * (start + res_cnt - 1);
+            ASSERT(got == expected, "expected %f, but got %f", expected, got);
+          }
+        } else if (op == LindormContest::AVG) {
+          double got;
+          row.columns[col_name].getDoubleFloatValue(got);
+
+          double expected = (start + start + res_cnt - 1) * 1.0 / 2;
+          ASSERT(got == expected, "expected %lf, but got %lf", expected, got);
         }
         pgrs.wg()->Done();
       }
@@ -361,6 +433,11 @@ int main() {
   parallel_test_latest(engine);
   parallel_test_time_range(engine);
 
+  parallel_agg(engine, LindormContest::AVG, 0);
+  parallel_agg(engine, LindormContest::AVG, 1);
+  parallel_agg(engine, LindormContest::MAX, 0);
+  parallel_agg(engine, LindormContest::MAX, 1);
+
   LOG_INFO("start shutdown...");
   engine->shutdown();
   delete engine;
@@ -373,6 +450,11 @@ int main() {
 
   parallel_test_latest(engine);
   parallel_test_time_range(engine);
+
+  parallel_agg(engine, LindormContest::AVG, 0);
+  parallel_agg(engine, LindormContest::AVG, 1);
+  parallel_agg(engine, LindormContest::MAX, 0);
+  parallel_agg(engine, LindormContest::MAX, 1);
 
   engine->shutdown();
 

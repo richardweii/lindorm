@@ -100,8 +100,8 @@ public:
   void GetRowsFromTimeRange(uint64_t vid, int64_t lowerInclusive, int64_t upperExclusive,
                             const std::vector<int>& colids, std::vector<Row>& results);
 
-  void AggregateQuery(uint64_t vid, int64_t lowerInclusive, int64_t upperExclusive, std::vector<int> colids,
-                      Aggregator op);
+  void AggregateQuery(uint64_t vid, int64_t lowerInclusive, int64_t upperExclusive, int colid, Aggregator op,
+                      std::vector<Row>& res);
 
   void DownSampleQuery(uint64_t vid, int64_t lowerInclusive, int64_t upperExclusive, std::vector<int> colids,
                        CompareExpression cmp);
@@ -117,6 +117,12 @@ public:
   Status Flush(bool shutdown = false);
 
 private:
+  template <typename TRes, typename TCol>
+  TRes AggregateAVG(std::vector<TCol>& input);
+
+  template <typename TRes, typename TCol>
+  TRes AggregateMAX(std::vector<TCol>& input);
+
   int shard_id_;
   TSDBEngineImpl* engine_{nullptr};
   File* data_file_{nullptr};
@@ -137,5 +143,12 @@ private:
   ColumnValue latest_ts_cols_[kVinNumPerShard][kColumnNum];
   int64_t latest_ts_cache_[kVinNumPerShard];
 };
+
+// template implementation
+template <typename TRes, typename TCol>
+TRes ShardImpl::AggregateAVG(std::vector<TCol>& input) {}
+
+template <typename TRes, typename TCol>
+TRes ShardImpl::AggregateMAX(std::vector<TCol>& input) {}
 
 } // namespace LindormContest

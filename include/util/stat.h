@@ -28,6 +28,8 @@ extern std::atomic<int64_t> compress_szs[];
 
 extern std::atomic<int64_t> cache_hit;
 extern std::atomic<int64_t> cache_cnt;
+extern std::atomic<int64_t> data_wait_cnt;
+extern std::atomic<int64_t> lru_wait_cnt;
 
 #define ENABLE_STAT
 #ifdef ENABLE_STAT

@@ -1,5 +1,6 @@
 #include "shard.h"
 
+#include "agg.h"
 #include "util/util.h"
 
 namespace LindormContest {
@@ -11,6 +12,7 @@ Status ReadCache::PutColumn(BlockMeta* meta, uint8_t colid, ColumnArrWrapper* co
   while (total_sz_ + col_data->TotalSize() >= max_sz_) {
     // 缓存已满
     while (lru_list_.empty()) {
+      RECORD_FETCH_ADD(lru_wait_cnt, 1);
       lru_cv_.wait(); // 等别人Release了才能进行LRU剔除
     }
     auto victim = lru_list_.back();
@@ -46,6 +48,7 @@ ColumnArrWrapper* ReadCache::GetColumn(BlockMeta* meta, uint8_t colid) {
   }
   cache_[key]->ref++;
   while (cache_[key]->filling) {
+    RECORD_FETCH_ADD(data_wait_cnt, 1);
     singleflight_cv_.wait(); // 要读取的数据在缓存中，但是其他协程正在填充数据
   }
 
@@ -56,7 +59,7 @@ void ReadCache::Release(BlockMeta* meta, uint8_t colid, ColumnArrWrapper* data) 
   Col key = {.ptr = meta, .colid = colid};
   auto iter = cache_.find(key);
   LOG_ASSERT(iter != cache_.end(), "referenced data should not be invalid");
-  auto &node = iter->second;
+  auto& node = iter->second;
   node->ref--;
   if (node->filling) {
     node->filling = false;
@@ -66,7 +69,7 @@ void ReadCache::Release(BlockMeta* meta, uint8_t colid, ColumnArrWrapper* data) 
     }
   }
 
-  if(node->ref == 0) {
+  if (node->ref == 0) {
     ref2lru(*node);
     lru_cv_.notify(); // 唤醒LRU协程
   }
@@ -356,7 +359,8 @@ void ShardImpl::GetRowsFromTimeRange(uint64_t vid, int64_t lowerInclusive, int64
 };
 
 ShardImpl::~ShardImpl() {
-  delete memtable_;
+  delete two_memtable_[0];
+  delete two_memtable_[1];
   delete read_cache_;
   delete write_buf_;
   delete block_mgr_;
@@ -367,4 +371,88 @@ void ShardImpl::InitMemTable() {
   two_memtable_[0]->Init();
   two_memtable_[1]->Init();
 };
+
+// TODO: 改成time range 过程中就计算，减少对row的构建
+void ShardImpl::AggregateQuery(uint64_t vid, int64_t lowerInclusive, int64_t upperExclusive, int colid, Aggregator op,
+                               std::vector<Row>& res) {
+  // if (UNLIKELY(write_phase_)) {
+  std::vector<Row> tmp_res;
+  GetRowsFromTimeRange(vid, lowerInclusive, upperExclusive, {colid}, tmp_res);
+  // 空范围
+  if (UNLIKELY(tmp_res.empty())) {
+    return;
+  }
+
+  std::string& col_name = engine_->columns_name_[colid];
+  ColumnType t = engine_->columns_type_[colid];
+  Row row;
+  if (op == AVG) {
+    if (t == COLUMN_TYPE_INTEGER) {
+      AvgAggregate<int> avg;
+      for (auto& row : tmp_res) {
+        ColumnValue& col_val = row.columns.at(col_name);
+        LOG_ASSERT(col_val.getColumnType() == COLUMN_TYPE_INTEGER, "invalid type %d", col_val.getColumnType());
+        int val;
+        col_val.getIntegerValue(val);
+        avg.Add(val);
+      }
+
+      ColumnValue res_val(avg.GetResult());
+
+      row.columns.emplace(std::make_pair(col_name, std::move(res_val)));
+      res.emplace_back(std::move(row));
+
+    } else if (t == COLUMN_TYPE_DOUBLE_FLOAT) {
+      AvgAggregate<double> avg;
+      for (auto& row : tmp_res) {
+        ColumnValue& col_val = row.columns.at(col_name);
+        LOG_ASSERT(col_val.getColumnType() == COLUMN_TYPE_DOUBLE_FLOAT, "invalid type %d", col_val.getColumnType());
+        double val;
+        col_val.getDoubleFloatValue(val);
+        avg.Add(val);
+      }
+
+      ColumnValue res_val(avg.GetResult());
+      row.columns.emplace(std::make_pair(col_name, std::move(res_val)));
+      res.emplace_back(std::move(row));
+
+    } else {
+      LOG_ERROR("should not be STRING TYPE");
+    }
+  } else if (op == MAX) {
+    if (t == COLUMN_TYPE_INTEGER) {
+      MaxAggreate<int> avg;
+      for (auto& row : tmp_res) {
+        ColumnValue& col_val = row.columns.at(col_name);
+        LOG_ASSERT(col_val.getColumnType() == COLUMN_TYPE_INTEGER, "invalid type %d", col_val.getColumnType());
+        int val;
+        col_val.getIntegerValue(val);
+        avg.Add(val);
+      }
+
+      ColumnValue res_val(avg.GetResult());
+      row.columns.emplace(std::make_pair(col_name, std::move(res_val)));
+      res.emplace_back(std::move(row));
+
+    } else if (t == COLUMN_TYPE_DOUBLE_FLOAT) {
+      MaxAggreate<double> avg;
+      for (auto& row : tmp_res) {
+        ColumnValue& col_val = row.columns.at(col_name);
+        LOG_ASSERT(col_val.getColumnType() == COLUMN_TYPE_DOUBLE_FLOAT, "invalid type %d", col_val.getColumnType());
+        double val;
+        col_val.getDoubleFloatValue(val);
+        avg.Add(val);
+      }
+
+      ColumnValue res_val(avg.GetResult());
+      row.columns.emplace(std::make_pair(col_name, std::move(res_val)));
+      res.emplace_back(std::move(row));
+
+    } else {
+      LOG_ERROR("should not be STRING TYPE");
+    }
+  }
+  // }
+};
+
 } // namespace LindormContest

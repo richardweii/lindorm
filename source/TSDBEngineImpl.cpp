@@ -74,10 +74,12 @@ void TSDBEngineImpl::loadSchema() {
 }
 
 int TSDBEngineImpl::connect() {
-  #ifdef ENABLE_STAT
+#ifdef ENABLE_STAT
   cache_hit = 0;
   cache_cnt = 0;
-  #endif
+  data_wait_cnt = 0;
+  lru_wait_cnt = 0;
+#endif
   io_mgr_ = new IOManager();
   for (int i = 0; i < kShardNum; i++) {
     shards_[i] = new ShardImpl(i, this);
@@ -352,6 +354,24 @@ int TSDBEngineImpl::executeTimeRangeQuery(const TimeRangeQueryRequest& trReadReq
 
 int TSDBEngineImpl::executeAggregateQuery(const TimeRangeAggregationRequest& aggregationReq,
                                           std::vector<Row>& aggregationRes) {
+  uint16_t vid = getVidForRead(aggregationReq.vin);
+  if (vid == UINT16_MAX) {
+    return 0;
+  }
+
+  int colid = column_idx_.at(aggregationReq.columnName);
+
+  int shard = sharding(vid);
+  WaitGroup wg(1);
+  coro_pool_->enqueue(
+    [this, shard, vid, &aggregationReq, colid, &wg, &aggregationRes]() {
+      shards_[shard]->AggregateQuery(vid, aggregationReq.timeLowerBound, aggregationReq.timeUpperBound, colid,
+                                     aggregationReq.aggregator, aggregationRes);
+      wg.Done();
+    },
+    shard2tid(shard));
+  wg.Wait();
+
   return 0;
 }
 

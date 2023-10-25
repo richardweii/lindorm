@@ -26,6 +26,9 @@ std::atomic<int64_t> compress_szs[kColumnNum + kExtraColNum];
 
 std::atomic<int64_t> cache_hit{0};
 std::atomic<int64_t> cache_cnt{0};
+std::atomic<int64_t> data_wait_cnt{0};
+std::atomic<int64_t> lru_wait_cnt{0};
+
 std::string types[] = {
   "NULL",
   "string",
@@ -51,6 +54,7 @@ void print_summary(ColumnType* columnsType, std::string* columnsName) {
   }
   LOG_INFO("ReadCache Hit: %ld, MISS: %ld, HitRate: %lf", cache_hit.load(), cache_cnt.load() - cache_hit.load(),
            cache_hit.load() * 1.0 / cache_cnt.load());
+  LOG_INFO("ReadCache data wait :%ld, lru wait %ld", data_wait_cnt.load(), lru_wait_cnt.load());
 }
 
 void print_row(const Row& row, uint16_t vid) {

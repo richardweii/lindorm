@@ -70,9 +70,9 @@ public:
                                    OUT std::vector<BlockMeta*>& blk_metas) {
     blk_metas.clear();
     BlockMeta* p = head_;
-    int idx = vid2svid(vid);
+    int svid = vid2svid(vid);
     while (p != nullptr) {
-      if (p->max_ts[idx] < min_ts || p->min_ts[idx] >= max_ts) {
+      if (p->max_ts[svid] < min_ts || p->min_ts[svid] >= max_ts) {
         p = p->next;
         continue;
       }
