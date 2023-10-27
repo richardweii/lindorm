@@ -388,71 +388,55 @@ void ShardImpl::AggregateQuery(uint64_t vid, int64_t lowerInclusive, int64_t upp
   Row row;
   if (op == AVG) {
     if (t == COLUMN_TYPE_INTEGER) {
-      AvgAggregate<int> avg;
-      for (auto& row : tmp_res) {
-        ColumnValue& col_val = row.columns.at(col_name);
-        LOG_ASSERT(col_val.getColumnType() == COLUMN_TYPE_INTEGER, "invalid type %d", col_val.getColumnType());
-        int val;
-        col_val.getIntegerValue(val);
-        avg.Add(val);
-      }
-
-      ColumnValue res_val(avg.GetResult());
-
-      row.columns.emplace(std::make_pair(col_name, std::move(res_val)));
-      res.emplace_back(std::move(row));
-
+      aggregateImpl<AvgAggregate<int>, int>(tmp_res, col_name, res);
     } else if (t == COLUMN_TYPE_DOUBLE_FLOAT) {
-      AvgAggregate<double> avg;
-      for (auto& row : tmp_res) {
-        ColumnValue& col_val = row.columns.at(col_name);
-        LOG_ASSERT(col_val.getColumnType() == COLUMN_TYPE_DOUBLE_FLOAT, "invalid type %d", col_val.getColumnType());
-        double val;
-        col_val.getDoubleFloatValue(val);
-        avg.Add(val);
-      }
-
-      ColumnValue res_val(avg.GetResult());
-      row.columns.emplace(std::make_pair(col_name, std::move(res_val)));
-      res.emplace_back(std::move(row));
-
+      aggregateImpl<AvgAggregate<double>, double>(tmp_res, col_name, res);
     } else {
       LOG_ERROR("should not be STRING TYPE");
     }
   } else if (op == MAX) {
     if (t == COLUMN_TYPE_INTEGER) {
-      MaxAggreate<int> avg;
-      for (auto& row : tmp_res) {
-        ColumnValue& col_val = row.columns.at(col_name);
-        LOG_ASSERT(col_val.getColumnType() == COLUMN_TYPE_INTEGER, "invalid type %d", col_val.getColumnType());
-        int val;
-        col_val.getIntegerValue(val);
-        avg.Add(val);
-      }
-
-      ColumnValue res_val(avg.GetResult());
-      row.columns.emplace(std::make_pair(col_name, std::move(res_val)));
-      res.emplace_back(std::move(row));
-
+      aggregateImpl<MaxAggreate<int>, int>(tmp_res, col_name, res);
     } else if (t == COLUMN_TYPE_DOUBLE_FLOAT) {
-      MaxAggreate<double> avg;
-      for (auto& row : tmp_res) {
-        ColumnValue& col_val = row.columns.at(col_name);
-        LOG_ASSERT(col_val.getColumnType() == COLUMN_TYPE_DOUBLE_FLOAT, "invalid type %d", col_val.getColumnType());
-        double val;
-        col_val.getDoubleFloatValue(val);
-        avg.Add(val);
-      }
-
-      ColumnValue res_val(avg.GetResult());
-      row.columns.emplace(std::make_pair(col_name, std::move(res_val)));
-      res.emplace_back(std::move(row));
-
+      aggregateImpl<MaxAggreate<double>, double>(tmp_res, col_name, res);
     } else {
       LOG_ERROR("should not be STRING TYPE");
     }
   }
   // }
 };
+
+void ShardImpl::DownSampleQuery(uint64_t vid, int64_t lowerInclusive, int64_t upperExclusive, int64_t interval,
+                                int colid, Aggregator op, const CompareExpression& cmp, std::vector<Row>& res) {
+  std::vector<Row> tmp_res;
+  GetRowsFromTimeRange(vid, lowerInclusive, upperExclusive, {colid}, tmp_res);
+  // 空范围
+  if (UNLIKELY(tmp_res.empty())) {
+    return;
+  }
+
+  std::string& col_name = engine_->columns_name_[colid];
+  ColumnType t = engine_->columns_type_[colid];
+
+  if (op == AVG) {
+    if (t == COLUMN_TYPE_INTEGER) {
+      downsampleImpl<AvgAggregate<int>, int>(tmp_res, col_name, lowerInclusive, upperExclusive, interval, cmp, res);
+    } else if (t == COLUMN_TYPE_DOUBLE_FLOAT) {
+      downsampleImpl<AvgAggregate<double>, double>(tmp_res, col_name, lowerInclusive, upperExclusive, interval, cmp,
+                                                   res);
+    } else {
+      LOG_ERROR("should not be STRING TYPE");
+    }
+  } else if (op == MAX) {
+    if (t == COLUMN_TYPE_INTEGER) {
+      downsampleImpl<MaxAggreate<int>, int>(tmp_res, col_name, lowerInclusive, upperExclusive, interval, cmp, res);
+    } else if (t == COLUMN_TYPE_DOUBLE_FLOAT) {
+      downsampleImpl<MaxAggreate<double>, double>(tmp_res, col_name, lowerInclusive, upperExclusive, interval, cmp,
+                                                  res);
+    } else {
+      LOG_ERROR("should not be STRING TYPE");
+    }
+  }
+}
 
 } // namespace LindormContest

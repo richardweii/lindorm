@@ -103,8 +103,8 @@ public:
   void AggregateQuery(uint64_t vid, int64_t lowerInclusive, int64_t upperExclusive, int colid, Aggregator op,
                       std::vector<Row>& res);
 
-  void DownSampleQuery(uint64_t vid, int64_t lowerInclusive, int64_t upperExclusive, std::vector<int> colids,
-                       CompareExpression cmp);
+  void DownSampleQuery(uint64_t vid, int64_t lowerInclusive, int64_t upperExclusive, int64_t interval, int colid,
+                       Aggregator op, const CompareExpression& cmp, std::vector<Row>& res);
 
   void SaveLatestRowCache(File* file);
 
@@ -117,11 +117,14 @@ public:
   Status Flush(bool shutdown = false);
 
 private:
-  template <typename TRes, typename TCol>
-  TRes AggregateAVG(std::vector<TCol>& input);
+  template <typename TAgg, typename TCol>
+  void aggregateImpl(const std::vector<Row>& input, const std::string& col_name, std::vector<Row>& res);
 
-  template <typename TRes, typename TCol>
-  TRes AggregateMAX(std::vector<TCol>& input);
+  template <typename TAgg, typename TCol>
+  void downsampleImpl(const std::vector<Row>& input, const std::string& col_name, int64_t lowerInclusive,
+                      int64_t upperExclusive, int64_t interval, const CompareExpression& cmp, std::vector<Row>& res);
+
+  static int position(int64_t lowerInclusive, int64_t interval, int64_t ts) { return (ts - lowerInclusive) / interval; }
 
   int shard_id_;
   TSDBEngineImpl* engine_{nullptr};
@@ -145,10 +148,44 @@ private:
 };
 
 // template implementation
-template <typename TRes, typename TCol>
-TRes ShardImpl::AggregateAVG(std::vector<TCol>& input) {}
+template <typename TAgg, typename TCol>
+inline void ShardImpl::aggregateImpl(const std::vector<Row>& input, const std::string& col_name,
+                                     std::vector<Row>& res) {
+  TAgg avg;
+  Row row;
+  for (auto& row : input) {
+    const ColumnValue& col_val = row.columns.at(col_name);
+    ColumnValueWrapper wrapper(&col_val);
+    avg.Add(wrapper.getFixedSizeValue<TCol>());
+  }
 
-template <typename TRes, typename TCol>
-TRes ShardImpl::AggregateMAX(std::vector<TCol>& input) {}
+  ColumnValue res_val(avg.GetResult());
 
+  row.columns.emplace(std::make_pair(col_name, std::move(res_val)));
+  res.emplace_back(std::move(row));
+};
+
+template <typename TAgg, typename TCol>
+inline void ShardImpl::downsampleImpl(const std::vector<Row>& input, const std::string& col_name,
+                                      int64_t lowerInclusive, int64_t upperExclusive, int64_t interval,
+                                      const CompareExpression& cmp, std::vector<Row>& res) {
+  int bucket_num = (upperExclusive - lowerInclusive) / interval;
+  std::vector<TAgg> buckets;
+  buckets.reserve(bucket_num);
+  ColumnValueWrapper wrapper(&cmp.value);
+  for (int i = 0; i < bucket_num; i++) {
+    buckets.emplace_back(cmp.compareOp, wrapper.getFixedSizeValue<TCol>());
+  }
+  for (auto& row : input) {
+    int pos = position(lowerInclusive, interval, row.timestamp);
+    const ColumnValue& col_val = row.columns.at(col_name);
+    ColumnValueWrapper wrapper(&col_val);
+    buckets[pos].Add(wrapper.getFixedSizeValue<TCol>());
+  }
+  for (auto& agg : buckets) {
+    Row row;
+    row.columns.emplace(std::make_pair(col_name, ColumnValue(agg.GetResult())));
+    res.push_back(std::move(row));
+  }
+}
 } // namespace LindormContest

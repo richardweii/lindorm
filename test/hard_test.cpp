@@ -413,6 +413,148 @@ void parallel_agg(LindormContest::TSDBEngine* engine, LindormContest::Aggregator
   LOG_INFO("parallel test time range PASS");
 }
 
+void parallel_downsample(LindormContest::TSDBEngine* engine, LindormContest::Aggregator op, int type, int cmp_t) {
+  LOG_INFO("start parallel downsample op %d, type %d cmp %d", op, type, cmp_t);
+  // validate time range
+  std::vector<std::thread> threads;
+  const int thread_num = 16;
+  const int per_thread_vin_num = kVinNum / thread_num;
+
+  Progress pgrs(kVinNum);
+  for (int t = 0; t < thread_num; t++) {
+    threads.emplace_back([t, engine, &pgrs, type, op, cmp_t]() {
+      bind_cores();
+      for (int i = t * per_thread_vin_num; i < (t + 1) * per_thread_vin_num; i++) {
+        LindormContest::TimeRangeDownsampleRequest tRD;
+        LindormContest::Vin vin;
+        memcpy(vin.vin, rows[i][0].vin.vin, LindormContest::VIN_LENGTH);
+        tRD.aggregator = op;
+        tRD.vin = vin;
+        tRD.tableName = "t1";
+        tRD.timeLowerBound = 0;
+        tRD.timeUpperBound = kRowsPerVin;
+        tRD.interval = 10;
+        std::string col_name;
+        if (type == 0) {
+          // int
+          col_name = "column_" + std::to_string(0);
+          tRD.columnName = col_name;
+        } else {
+          // double
+          col_name = "column_" + std::to_string(2);
+          tRD.columnName = col_name;
+        }
+
+        LindormContest::CompareExpression cmp;
+        if (cmp_t == 0) {
+          // EQUAL
+          cmp.compareOp = LindormContest::EQUAL;
+        } else {
+          // GREATER
+          cmp.compareOp = LindormContest::GREATER;
+        }
+
+        int filter_val = rand() % kRowsPerVin;
+        if (type == 0) {
+          cmp.value = LindormContest::ColumnValue(filter_val);
+        } else {
+          cmp.value = LindormContest::ColumnValue(filter_val * 1.0);
+        }
+        tRD.columnFilter = cmp;
+
+        std::vector<LindormContest::Row> trReadRes;
+        int ret = engine->executeDownsampleQuery(tRD, trReadRes);
+        ASSERT(trReadRes.size() == kRowsPerVin / 10, "size = %zu", trReadRes.size());
+
+        if (op == LindormContest::MAX) {
+          if (cmp_t == LindormContest::GREATER) {
+            if (type == 0) {
+              for (int j = 0; j < trReadRes.size(); j++) {
+                auto& r = trReadRes[j];
+                int got;
+                r.columns.at(col_name).getIntegerValue(got);
+                int expected = 10 * (j + 1) - 1;
+                expected = expected > filter_val ? expected : LindormContest::kIntNan;
+                ASSERT(got == expected, "expect %d, but got %d", expected, got);
+              }
+            } else if (type == 1) {
+              for (int j = 0; j < trReadRes.size(); j++) {
+                auto& r = trReadRes[j];
+                double got;
+                r.columns.at(col_name).getDoubleFloatValue(got);
+                double expected = (10 * (j + 1) - 1) * 1.0;
+                expected = expected > filter_val ? expected : LindormContest::kDoubleNan;
+                ASSERT(got == expected, "expect %lf, but got %lf", expected, got);
+              }
+            }
+          } else if (cmp_t == LindormContest::EQUAL) {
+            if (type == 0) {
+              for (int j = 0; j < trReadRes.size(); j++) {
+                auto& r = trReadRes[j];
+                int got;
+                r.columns.at(col_name).getIntegerValue(got);
+                int expected = LindormContest::kIntNan;
+                if (10 * j <= filter_val && filter_val < 10 * (j + 1)) {
+                  expected = filter_val;
+                }
+                ASSERT(got == expected, "expect %d, but got %d", expected, got);
+              }
+            } else if (type == 1) {
+              for (int j = 0; j < trReadRes.size(); j++) {
+                auto& r = trReadRes[j];
+                double got;
+                r.columns.at(col_name).getDoubleFloatValue(got);
+                double expected = LindormContest::kDoubleNan;
+                if (10 * j <= filter_val && filter_val < 10 * (j + 1)) {
+                  expected = filter_val * 1.0;
+                }
+                ASSERT(got == expected, "expect %lf, but got %lf", expected, got);
+              }
+            }
+          }
+
+        } else if (op == LindormContest::AVG) {
+          if (cmp_t == LindormContest::GREATER) {
+            for (int j = 0; j < trReadRes.size(); j++) {
+              auto& r = trReadRes[j];
+              double got;
+              r.columns.at(col_name).getDoubleFloatValue(got);
+              double expected = LindormContest::kDoubleNan;
+              if (filter_val < 10 * j) {
+                expected = (10 * j + 10 * (j + 1) - 1) * 1.0 / 2;
+              } else if (10 * j <= filter_val && filter_val < j * (10 + 1) - 1) {
+                expected = (filter_val + 1 + 10 * (j + 1) - 1) * 1.0 / 2;
+              }
+              expected = expected > filter_val ? expected : LindormContest::kIntNan;
+              ASSERT(got == expected, "expect %lf, but got %lf", expected, got);
+            }
+          } else if (cmp_t == LindormContest::EQUAL) {
+            for (int j = 0; j < trReadRes.size(); j++) {
+              auto& r = trReadRes[j];
+              double got;
+              r.columns.at(col_name).getDoubleFloatValue(got);
+              double expected = LindormContest::kDoubleNan;
+              if (10 * j <= filter_val && filter_val < 10 * (j + 1)) {
+                expected = filter_val * 1.0;
+              }
+              ASSERT(got == expected, "expect %lf, but got %lf", expected, got);
+            }
+          }
+        }
+        pgrs.wg()->Done();
+      }
+    });
+  }
+
+  pgrs.Wait();
+  pgrs.Finish();
+  for (auto& th : threads) {
+    th.join();
+  }
+
+  LOG_INFO("parallel test time range PASS");
+}
+
 int main() {
   std::string dataPath = "/tmp/tsdb_test";
   clearTempFolder(dataPath);
@@ -438,6 +580,15 @@ int main() {
   parallel_agg(engine, LindormContest::MAX, 0);
   parallel_agg(engine, LindormContest::MAX, 1);
 
+  parallel_downsample(engine, LindormContest::AVG, 0, 0);
+  parallel_downsample(engine, LindormContest::AVG, 0, 0);
+  parallel_downsample(engine, LindormContest::AVG, 1, 0);
+  parallel_downsample(engine, LindormContest::AVG, 1, 0);
+  parallel_downsample(engine, LindormContest::MAX, 0, 1);
+  parallel_downsample(engine, LindormContest::MAX, 0, 1);
+  parallel_downsample(engine, LindormContest::MAX, 1, 1);
+  parallel_downsample(engine, LindormContest::MAX, 1, 1);
+
   LOG_INFO("start shutdown...");
   engine->shutdown();
   delete engine;
@@ -451,10 +602,14 @@ int main() {
   parallel_test_latest(engine);
   parallel_test_time_range(engine);
 
-  parallel_agg(engine, LindormContest::AVG, 0);
-  parallel_agg(engine, LindormContest::AVG, 1);
-  parallel_agg(engine, LindormContest::MAX, 0);
-  parallel_agg(engine, LindormContest::MAX, 1);
+  parallel_downsample(engine, LindormContest::AVG, 0, 0);
+  parallel_downsample(engine, LindormContest::AVG, 0, 0);
+  parallel_downsample(engine, LindormContest::AVG, 1, 0);
+  parallel_downsample(engine, LindormContest::AVG, 1, 0);
+  parallel_downsample(engine, LindormContest::MAX, 0, 1);
+  parallel_downsample(engine, LindormContest::MAX, 0, 1);
+  parallel_downsample(engine, LindormContest::MAX, 1, 1);
+  parallel_downsample(engine, LindormContest::MAX, 1, 1);
 
   engine->shutdown();
 

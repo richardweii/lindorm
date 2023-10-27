@@ -588,4 +588,30 @@ private:
   ColumnArr<uint16_t>* arr;
 };
 
+// 用来统一取值模式用在泛型里面
+class ColumnValueWrapper {
+public:
+  ColumnValueWrapper(const ColumnValue* val) : val_(val) {}
+
+  template <typename T>
+  T getFixedSizeValue();
+
+private:
+  const ColumnValue* val_;
+};
+
+template <>
+inline int ColumnValueWrapper::getFixedSizeValue<int>() {
+  int v;
+  val_->getIntegerValue(v);
+  return v;
+}
+
+template <>
+inline double ColumnValueWrapper::getFixedSizeValue<double>() {
+  double v;
+  val_->getDoubleFloatValue(v);
+  return v;
+}
+
 } // namespace LindormContest

@@ -377,6 +377,25 @@ int TSDBEngineImpl::executeAggregateQuery(const TimeRangeAggregationRequest& agg
 
 int TSDBEngineImpl::executeDownsampleQuery(const TimeRangeDownsampleRequest& downsampleReq,
                                            std::vector<Row>& downsampleRes) {
+  uint16_t vid = getVidForRead(downsampleReq.vin);
+  if (vid == UINT16_MAX) {
+    return 0;
+  }
+
+  int colid = column_idx_.at(downsampleReq.columnName);
+
+  int shard = sharding(vid);
+  WaitGroup wg(1);
+  coro_pool_->enqueue(
+    [this, shard, vid, &downsampleReq, colid, &wg, &downsampleRes]() {
+      shards_[shard]->DownSampleQuery(vid, downsampleReq.timeLowerBound, downsampleReq.timeUpperBound,
+                                      downsampleReq.interval, colid, downsampleReq.aggregator,
+                                      downsampleReq.columnFilter, downsampleRes);
+      wg.Done();
+    },
+    shard2tid(shard));
+  wg.Wait();
+
   return 0;
 }
 
