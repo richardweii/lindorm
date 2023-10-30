@@ -79,7 +79,7 @@
 #define LOG_DEBUG(format, ...)
 #endif
 
-#ifndef NDEBUG
+// #ifndef NDEBUG
 #define LOG_ASSERT(condition, format, ...)                                                                         \
   do {                                                                                                             \
     if (!(condition)) {                                                                                            \
@@ -89,9 +89,9 @@
       abort();                                                                                                     \
     }                                                                                                              \
   } while (0)
-#else
-#define LOG_ASSERT(condition, format, ...)
-#endif
+// #else
+// #define LOG_ASSERT(condition, format, ...)
+// #endif
 
 #define ENSURE(condition, format, ...)                                                                             \
   do {                                                                                                             \

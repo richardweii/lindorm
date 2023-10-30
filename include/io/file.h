@@ -8,6 +8,7 @@
 #include <thread>
 
 #include "common.h"
+#include "coroutine/coro_cond.h"
 #include "coroutine/scheduler.h"
 #include "status.h"
 #include "util/libaio.h"
@@ -148,7 +149,7 @@ public:
 
 class AsyncFile : public File {
 public:
-  static constexpr int kMaxIONum = 1024;
+  static constexpr int kMaxIONum = 256;
   struct IOContext {
     Coroutine* coro;
     AsyncFile* file;
@@ -179,16 +180,27 @@ public:
     ioctx->coro->wakeup_once();
     ioctx->coro = nullptr;
     ioctx->file->inflight_--;
+    ioctx->file->cv_.notify();
     ioctx->file->ctx_list_.push_back(ioctx);
   }
 
   io_context_t* getAIOContext() { return &ctx_; }
+
+  // 还有能发起多少个IO
+  int avalibaleIOC() const {
+    ENSURE(inflight_ >= 0 && inflight_ < kMaxIONum, "invalid inflight %d", inflight_);
+    return kMaxIONum - inflight_;
+  }
+
+  // 等其他人IO结束释放IOC
+  void waitIOC() { cv_.wait(); }
 
 protected:
   io_context_t ctx_;
   IOContext iocb_data_[kMaxIONum];
   std::list<IOContext*> ctx_list_;
   volatile int inflight_{0};
+  CoroCV cv_;
 };
 
 class AsyncWriteFile : public AsyncFile {
@@ -231,6 +243,7 @@ public:
 
     file_sz_ += length;
     inflight_++;
+    // LOG_DEBUG("[coro %d] [file %s] async write", this_coroutine::current()->id(), this->filename_.c_str());
     return Status::OK;
   }
 };

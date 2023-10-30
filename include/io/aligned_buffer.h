@@ -82,8 +82,8 @@ public:
     offset_ = 0;
     struct stat st;
     fstat(file_->fd(), &st);
-    LOG_DEBUG("file name%s, file write size %lu, file sz %lu", file_->getFileName().c_str(), st.st_size,
-              file_->getFileSz());
+    // LOG_DEBUG("file name%s, file write size %lu, file sz %lu", file_->getFileName().c_str(), st.st_size,
+    //           file_->getFileSz());
   }
 
   bool empty() { return offset_ == 0; }

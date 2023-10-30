@@ -13,10 +13,10 @@ public:
 
   void Add(TCol val) {
     if (filter(val)) {
+      add(val);
       if (UNLIKELY(empty_)) {
         empty_ = false;
       }
-      add(val);
     }
   };
 
@@ -84,7 +84,9 @@ public:
 
 private:
   virtual void add(T val) override {
-    if (val > this->res_) {
+    if (UNLIKELY(this->empty_)) {
+      this->res_ = val;
+    } else if (val > this->res_) {
       this->res_ = val;
     }
   }

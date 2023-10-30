@@ -13,6 +13,8 @@ namespace LindormContest {
 std::atomic<int64_t> write_cnt{0};
 std::atomic<int64_t> latest_query_cnt{0};
 std::atomic<int64_t> time_range_query_cnt{0};
+std::atomic<int64_t> agg_query_cnt{0};
+std::atomic<int64_t> downsample_query_cnt{0};
 
 std::atomic<int64_t> write_time{0}; // 单位为ms
 std::atomic<int64_t> latest_query_time{0};
@@ -41,6 +43,8 @@ void print_summary(ColumnType* columnsType, std::string* columnsName) {
   LOG_INFO("write_cnt: %ld", write_cnt.load());
   LOG_INFO("latest_query_cnt: %ld", latest_query_cnt.load());
   LOG_INFO("time_range_query_cnt: %ld", time_range_query_cnt.load());
+  LOG_INFO("agg_query_cnt: %ld", agg_query_cnt.load());
+  LOG_INFO("downsample_query_cnt: %ld", downsample_query_cnt.load());
   LOG_INFO("tr_memtable_blk_query_cnt: %ld", tr_memtable_blk_query_cnt.load());
   LOG_INFO("tr_disk_blk_query_cnt: %ld", tr_disk_blk_query_cnt.load());
   for (int i = 0; i < kColumnNum; i++) {

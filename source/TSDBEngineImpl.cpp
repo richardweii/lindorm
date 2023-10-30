@@ -80,14 +80,13 @@ int TSDBEngineImpl::connect() {
   data_wait_cnt = 0;
   lru_wait_cnt = 0;
 #endif
+  print_memory_usage();
+  loadSchema();
   io_mgr_ = new IOManager();
   for (int i = 0; i < kShardNum; i++) {
     shards_[i] = new ShardImpl(i, this);
   }
   coro_pool_ = new CoroutinePool(kWorkerThread, kCoroutinePerThread);
-  print_memory_usage();
-  loadSchema();
-
   // 初始化shard
   File* shard_file = nullptr;
   for (int i = 0; i < kShardNum; i++) {
@@ -149,10 +148,12 @@ int TSDBEngineImpl::connect() {
   LOG_INFO("load latest row cache finished");
 
   mem_pool_addr_ = std::aligned_alloc(512, kMemoryPoolSz);
+  ENSURE(mem_pool_addr_ != nullptr, "invalid mem_pool_addr");
   InitMemPool(mem_pool_addr_, kMemoryPoolSz, 512 * KB);
 
   coro_pool_->registerPollingFunc(std::bind(&IOManager::PollingIOEvents, io_mgr_));
   coro_pool_->start();
+  LOG_INFO("======== Finish connect!========");
   return 0;
 }
 
@@ -301,9 +302,7 @@ int TSDBEngineImpl::write(const WriteRequest& writeRequest) {
 int TSDBEngineImpl::executeLatestQuery(const LatestQueryRequest& pReadReq, std::vector<Row>& pReadRes) {
   RECORD_FETCH_ADD(latest_query_cnt, pReadReq.vins.size());
   std::vector<int> colids;
-  for (auto& col_name : pReadReq.requestedColumns) {
-    colids.emplace_back(column_idx_[col_name]);
-  }
+  fillColids(pReadReq.requestedColumns, colids);
 
   WaitGroup wg(pReadReq.vins.size());
   std::mutex mt;
@@ -332,9 +331,8 @@ int TSDBEngineImpl::executeLatestQuery(const LatestQueryRequest& pReadReq, std::
 int TSDBEngineImpl::executeTimeRangeQuery(const TimeRangeQueryRequest& trReadReq, std::vector<Row>& trReadRes) {
   RECORD_FETCH_ADD(time_range_query_cnt, 1);
   std::vector<int> colids;
-  for (auto& col_name : trReadReq.requestedColumns) {
-    colids.emplace_back(column_idx_[col_name]);
-  }
+  fillColids(trReadReq.requestedColumns, colids);
+
   uint16_t vid = getVidForRead(trReadReq.vin);
   if (vid == UINT16_MAX) {
     return 0;
@@ -349,11 +347,21 @@ int TSDBEngineImpl::executeTimeRangeQuery(const TimeRangeQueryRequest& trReadReq
     },
     shard2tid(shard));
   wg.Wait();
+
+#ifdef ENABLE_STAT
+  auto tq = time_range_query_cnt.load();
+  if (tq % 1000 == 0) {
+    LOG_DEBUG("time range %ld", tq);
+  }
+#endif
+
   return 0;
 }
 
 int TSDBEngineImpl::executeAggregateQuery(const TimeRangeAggregationRequest& aggregationReq,
                                           std::vector<Row>& aggregationRes) {
+  RECORD_FETCH_ADD(agg_query_cnt, 1);
+
   uint16_t vid = getVidForRead(aggregationReq.vin);
   if (vid == UINT16_MAX) {
     return 0;
@@ -371,12 +379,19 @@ int TSDBEngineImpl::executeAggregateQuery(const TimeRangeAggregationRequest& agg
     },
     shard2tid(shard));
   wg.Wait();
-
+#ifdef ENABLE_STAT
+  auto tq = agg_query_cnt.load();
+  if (tq % 1000 == 0) {
+    LOG_DEBUG("agg %ld", tq);
+  }
+#endif
   return 0;
 }
 
 int TSDBEngineImpl::executeDownsampleQuery(const TimeRangeDownsampleRequest& downsampleReq,
                                            std::vector<Row>& downsampleRes) {
+  RECORD_FETCH_ADD(downsample_query_cnt, 1);
+
   uint16_t vid = getVidForRead(downsampleReq.vin);
   if (vid == UINT16_MAX) {
     return 0;
@@ -395,7 +410,12 @@ int TSDBEngineImpl::executeDownsampleQuery(const TimeRangeDownsampleRequest& dow
     },
     shard2tid(shard));
   wg.Wait();
-
+#ifdef ENABLE_STAT
+  auto tq = downsample_query_cnt.load();
+  if (tq % 1000 == 0) {
+    LOG_DEBUG("downsample %ld", tq);
+  }
+#endif
   return 0;
 }
 
@@ -407,7 +427,7 @@ uint16_t TSDBEngineImpl::getVidForRead(const Vin& vin) {
   auto it = vin2vid_.find(str);
   if (it == vin2vid_.end()) {
     vin2vid_lck_.unlock();
-    LOG_INFO("查找了一个不存在的vin");
+    LOG_ERROR("lookup invalid VIN");
     return UINT16_MAX;
   }
   uint16_t vid = it->second;
@@ -447,4 +467,22 @@ uint16_t TSDBEngineImpl::getVidForWrite(const Vin& vin) {
 
   return vid;
 }
+
+void TSDBEngineImpl::fillColids(const std::set<std::string>& requestedColumns, std::vector<int>& colids) {
+  for (auto& col_name : requestedColumns) {
+    auto iter = column_idx_.find(col_name);
+    if (LIKELY(iter != column_idx_.end())) {
+      colids.emplace_back(iter->second);
+    } else {
+      LOG_ERROR("request invalid column name.");
+    }
+  }
+
+  if (UNLIKELY(colids.empty())) {
+    // LOG_DEBUG("request all columns");
+    for (int i = 0; i < kColumnNum; i++) {
+      colids.emplace_back(i);
+    }
+  }
+};
 } // namespace LindormContest

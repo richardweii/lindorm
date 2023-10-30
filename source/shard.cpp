@@ -84,7 +84,6 @@ void ShardImpl::Init(bool write_phase, File* data_file) {
   block_mgr_ = new BlockMetaManager();
 
   if (write_phase_) {
-    LOG_INFO("write phase");
     write_buf_ = new AlignedWriteBuffer(data_file);
     two_memtable_[0] = new MemTable(shard_id_, engine_);
     two_memtable_[1] = new MemTable(shard_id_, engine_);
@@ -310,6 +309,9 @@ void ShardImpl::GetRowsFromTimeRange(uint64_t vid, int64_t lowerInclusive, int64
         LOG_ASSERT(async_rf != nullptr, "invalid cast");
 
         // 同时下发多个异步读IO
+        while (async_rf->avalibaleIOC() < need_read_from_file.size()) {
+          async_rf->waitIOC();
+        }
         for (auto& col : need_read_from_file) {
           // 储存用于异步IO的buf
           tmp_bufs.push_back(col->AsyncReadCompressed(async_rf, blk_meta));
@@ -353,7 +355,7 @@ void ShardImpl::GetRowsFromTimeRange(uint64_t vid, int64_t lowerInclusive, int64
     }
   }
 
-  if (rfile != data_file_) {
+  if (UNLIKELY(write_phase_)) {
     delete rfile;
   }
 };
@@ -388,21 +390,24 @@ void ShardImpl::AggregateQuery(uint64_t vid, int64_t lowerInclusive, int64_t upp
   Row row;
   if (op == AVG) {
     if (t == COLUMN_TYPE_INTEGER) {
-      aggregateImpl<AvgAggregate<int>, int>(tmp_res, col_name, res);
+      aggregateImpl<AvgAggregate<int>, int>(tmp_res, col_name, row);
     } else if (t == COLUMN_TYPE_DOUBLE_FLOAT) {
-      aggregateImpl<AvgAggregate<double>, double>(tmp_res, col_name, res);
+      aggregateImpl<AvgAggregate<double>, double>(tmp_res, col_name, row);
     } else {
       LOG_ERROR("should not be STRING TYPE");
     }
   } else if (op == MAX) {
     if (t == COLUMN_TYPE_INTEGER) {
-      aggregateImpl<MaxAggreate<int>, int>(tmp_res, col_name, res);
+      aggregateImpl<MaxAggreate<int>, int>(tmp_res, col_name, row);
     } else if (t == COLUMN_TYPE_DOUBLE_FLOAT) {
-      aggregateImpl<MaxAggreate<double>, double>(tmp_res, col_name, res);
+      aggregateImpl<MaxAggreate<double>, double>(tmp_res, col_name, row);
     } else {
       LOG_ERROR("should not be STRING TYPE");
     }
   }
+  row.timestamp = lowerInclusive;
+  ::memcpy(row.vin.vin, engine_->vid2vin_[vid].c_str(), VIN_LENGTH);
+  res.push_back(std::move(row));
   // }
 };
 

@@ -348,7 +348,7 @@ public:
     uint32_t off = offsets_[idx];
     uint32_t len = 0;
     len = offsets_[idx + 1] - offsets_[idx];
-    LOG_ASSERT(len != 0, "len should not be equal 0");
+    // LOG_ASSERT(len != 0, "len should not be equal 0");
 
     const std::string& res_str = data_.substr(off, len);
     value.columnType = COLUMN_TYPE_STRING;

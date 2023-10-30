@@ -19,11 +19,17 @@ public:
     uint8_t colid{};
     uint8_t ref{0};               // 只用做delete 的引用计数
     volatile bool filling{false}; // 表示这个col正在填充数据，还不能被访问
+    bool operator==(const Col& other) const { return ptr == other.ptr && colid == other.colid; }
+  };
+
+  struct ColHasher {
     std::size_t operator()(const Col& key) const {
       return std::hash<uint64_t>()(reinterpret_cast<uint64_t>(key.ptr)) ^ std::hash<int>()(key.colid);
     }
+  };
 
-    bool operator==(const Col& other) const { return ptr == other.ptr && colid == other.colid; }
+  struct ColEqual {
+    bool operator()(const Col& a, const Col& b) const { return a == b; }
   };
 
   ReadCache(size_t max_sz) : max_sz_(max_sz) {}
@@ -48,7 +54,7 @@ public:
 
 private:
   // LRU cache
-  std::unordered_map<Col, std::list<Col>::iterator, Col> cache_;
+  std::unordered_map<Col, std::list<Col>::iterator, ColHasher, ColEqual> cache_;
   std::list<Col> lru_list_;      // 可以evict进行剔除
   std::list<Col> ref_list_;      // 正在被引用
   std::list<Col> prepared_list_; // 刚创建还在被某个协程填充数据
@@ -118,7 +124,7 @@ public:
 
 private:
   template <typename TAgg, typename TCol>
-  void aggregateImpl(const std::vector<Row>& input, const std::string& col_name, std::vector<Row>& res);
+  void aggregateImpl(const std::vector<Row>& input, const std::string& col_name, Row& res);
 
   template <typename TAgg, typename TCol>
   void downsampleImpl(const std::vector<Row>& input, const std::string& col_name, int64_t lowerInclusive,
@@ -150,9 +156,8 @@ private:
 // template implementation
 template <typename TAgg, typename TCol>
 inline void ShardImpl::aggregateImpl(const std::vector<Row>& input, const std::string& col_name,
-                                     std::vector<Row>& res) {
+                                     Row &res) {
   TAgg avg;
-  Row row;
   for (auto& row : input) {
     const ColumnValue& col_val = row.columns.at(col_name);
     ColumnValueWrapper wrapper(&col_val);
@@ -161,8 +166,7 @@ inline void ShardImpl::aggregateImpl(const std::vector<Row>& input, const std::s
 
   ColumnValue res_val(avg.GetResult());
 
-  row.columns.emplace(std::make_pair(col_name, std::move(res_val)));
-  res.emplace_back(std::move(row));
+  res.columns.emplace(std::make_pair(col_name, std::move(res_val)));
 };
 
 template <typename TAgg, typename TCol>
@@ -182,9 +186,13 @@ inline void ShardImpl::downsampleImpl(const std::vector<Row>& input, const std::
     ColumnValueWrapper wrapper(&col_val);
     buckets[pos].Add(wrapper.getFixedSizeValue<TCol>());
   }
-  for (auto& agg : buckets) {
+
+  for (size_t i = 0; i < buckets.size(); i++) {
+    auto &agg = buckets[i];
     Row row;
     row.columns.emplace(std::make_pair(col_name, ColumnValue(agg.GetResult())));
+    ::memcpy(row.vin.vin, input.front().vin.vin, VIN_LENGTH);
+    row.timestamp = lowerInclusive + i * interval;
     res.push_back(std::move(row));
   }
 }

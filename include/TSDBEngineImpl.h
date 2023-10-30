@@ -54,6 +54,8 @@ public:
   ~TSDBEngineImpl() override;
 
 private:
+  void fillColids(const std::set<std::string>& requestedColumns, std::vector<int>& colids);
+
   friend class MemTable;
   friend class ShardImpl;
   void saveSchema();

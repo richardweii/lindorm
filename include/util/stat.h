@@ -15,6 +15,8 @@ namespace LindormContest {
 extern std::atomic<int64_t> write_cnt;
 extern std::atomic<int64_t> latest_query_cnt;
 extern std::atomic<int64_t> time_range_query_cnt;
+extern std::atomic<int64_t> agg_query_cnt;
+extern std::atomic<int64_t> downsample_query_cnt;
 
 extern std::atomic<int64_t> latest_query_time;
 extern std::atomic<int64_t> write_time;

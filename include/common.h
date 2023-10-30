@@ -6,15 +6,12 @@
 #include "util/likely.h"
 #include "util/logging.h"
 #include "util/slice.h"
-#define DEBUG_TEST
+// #define DEBUG_TEST
 
 #define OUT
 
 #define KB (1024)
-#define K (1024)
-
 #define MB (1024 * 1024)
-#define M (1024 * 1024)
 
 namespace LindormContest {
 
@@ -26,7 +23,7 @@ constexpr int kShardBits = 7;
 // 按照vin进行分片的数量，最好保证和kVinNum是整除的关系，这样每个分片的vin数量是均匀的
 constexpr int kShardNum = 1 << kShardBits;
 constexpr int kVinNumPerShard = (kVinNum / kShardNum) + 1; // 打到每个memtable里面vin的个数
-constexpr int kMemtableRowNum = 4 * K;                    // 一个memtable里面最多存储多少行数据
+constexpr int kMemtableRowNum = 4 * KB;                    // 一个memtable里面最多存储多少行数据
 constexpr int kExtraColNum = 3;
 constexpr int kWriteBufferSize = 1024 * KB;
 constexpr size_t kReadCacheSize = 32 * MB;
