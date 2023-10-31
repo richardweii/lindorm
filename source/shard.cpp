@@ -16,6 +16,7 @@ Status ReadCache::PutColumn(BlockMeta* meta, uint8_t colid, ColumnArrWrapper* co
       lru_cv_.wait(); // 等别人Release了才能进行LRU剔除
     }
     auto victim = lru_list_.back();
+    LOG_ASSERT(victim.column_arr != nullptr, "invalid victim");
     auto sz = victim.column_arr->TotalSize();
     LOG_ASSERT(victim.ref == 0, "someone are using this.");
     delete victim.column_arr;
@@ -59,20 +60,21 @@ void ReadCache::Release(BlockMeta* meta, uint8_t colid, ColumnArrWrapper* data) 
   Col key = {.ptr = meta, .colid = colid};
   auto iter = cache_.find(key);
   LOG_ASSERT(iter != cache_.end(), "referenced data should not be invalid");
-  auto& node = iter->second;
-  node->ref--;
-  if (node->filling) {
-    node->filling = false;
-    prepared2ref(*node);
-    if (node->ref > 0) {
+  auto node = *iter->second; // 用copy模式，因为move list的时候会移动iterator
+  node.ref--;
+  if (node.filling) {
+    node.filling = false;
+    prepared2ref(node);
+    if (node.ref > 0) {
       singleflight_cv_.notify(); // 唤醒其他等数据的协程
     }
   }
 
-  if (node->ref == 0) {
-    ref2lru(*node);
+  if (node.ref == 0) {
+    ref2lru(node);
     lru_cv_.notify(); // 唤醒LRU协程
   }
+  *cache_[node] = node; // copy模式下修改了之后要重新设置
 };
 
 void ShardImpl::Init(bool write_phase, File* data_file) {

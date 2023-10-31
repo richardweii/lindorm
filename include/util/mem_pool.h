@@ -59,10 +59,10 @@ public:
     }
   }
 
-  void* chunk_addr_;
-  size_t size_;
+  void* chunk_addr_{nullptr};
+  size_t size_{0};
   uint16_t longest_[BUDDY_SYSTEM_MAX_NODE_NUM];
-  int cnt_;
+  int cnt_{0};
 };
 
 class BuddyThreadHeap {
@@ -107,8 +107,8 @@ private:
   void* free_buf_[FREE_BUF_SIZE];
 
   std::list<BuddySystem*> freeze_buddies_;
-  BuddySystem* active_buddy2_;
-  BuddySystem* active_buddy1_;
+  BuddySystem* active_buddy2_{nullptr};
+  BuddySystem* active_buddy1_{nullptr};
 };
 
 void InitMemPool(void* pool_addr, size_t pool_size, size_t chunk_size);

@@ -18,7 +18,7 @@ namespace LindormContest {
 
 #ifndef DEBUG_TEST
 constexpr int kColumnNum = 60;
-constexpr int kVinNum = 50000;
+constexpr int kVinNum = 5000;
 constexpr int kShardBits = 7;
 // 按照vin进行分片的数量，最好保证和kVinNum是整除的关系，这样每个分片的vin数量是均匀的
 constexpr int kShardNum = 1 << kShardBits;

@@ -101,7 +101,12 @@ public:
 
 class SequentialReadFile : public File {
 public:
-  SequentialReadFile(const std::string& filename) : File(filename) { fd_ = open(filename.c_str(), O_RDONLY, 0600); }
+  SequentialReadFile(const std::string& filename) : File(filename) {
+    fd_ = open(filename.c_str(), O_RDONLY, 0600);
+    if (fd_ < 0) {
+      perror("Open File failed.");
+    }
+  }
 
   Status read(char* res_buf, size_t length) override {
     while (length > 0) {
@@ -126,7 +131,12 @@ public:
 
 class RandomAccessFile : public File {
 public:
-  RandomAccessFile(const std::string& filename) : File(filename) { fd_ = open(filename.c_str(), O_RDONLY, 0600); }
+  RandomAccessFile(const std::string& filename) : File(filename) {
+    fd_ = open(filename.c_str(), O_RDONLY, 0600);
+    if (fd_ < 0) {
+      perror("Open File failed.");
+    }
+  }
 
   Status read(char* res_buf, size_t length, off_t pos) override {
     ::lseek(fd_, pos, SEEK_SET);
