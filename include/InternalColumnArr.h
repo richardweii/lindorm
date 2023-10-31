@@ -55,11 +55,11 @@ public:
     uint64_t input_sz = cnt * sizeof(T);
     uint64_t compress_buf_sz = max_dest_size_func(input_sz);
 
-    auto compress_buf = reinterpret_cast<char*>(BuddyThreadHeap::get_instance()->alloc(compress_buf_sz));
+    auto compress_buf = reinterpret_cast<char*>(naive_alloc(compress_buf_sz));
     uint64_t compress_sz = compress_func((const char*)data_, input_sz, compress_buf, compress_buf_sz);
 
     buffer->write(compress_buf, compress_sz, offset);
-    BuddyThreadHeap::get_instance()->free_local(compress_buf);
+    naive_free(compress_buf);
 
     meta->offset[col_id_] = offset;
     meta->origin_sz[col_id_] = input_sz;
@@ -77,7 +77,7 @@ public:
 
     uint64_t file_read_off = rounddown512(meta->offset[col_id_]);                                 // offset对齐
     size_t compressed_buf_sz = roundup512(meta->compress_sz[col_id_] + (offset - file_read_off)); // 预留足够的空间
-    auto buf = reinterpret_cast<char*>(BuddyThreadHeap::get_instance()->alloc(compressed_buf_sz));
+    auto buf = reinterpret_cast<char*>(naive_alloc(compressed_buf_sz));
     char* compressed_data = buf;
 
     if (LIKELY(buffer == nullptr) || buffer->empty() || offset + compress_sz <= (uint64_t)buffer->FlushedSz()) {
@@ -109,7 +109,7 @@ public:
 
     auto ret = decompress_func(compressed_data, (char*)data_, compress_sz, meta->origin_sz[col_id_]);
     LOG_ASSERT(ret == (int)meta->origin_sz[col_id_], "uncompress error");
-    BuddyThreadHeap::get_instance()->free_local(buf);
+    naive_free(buf);
   }
 
   char* AsyncReadCompressed(AsyncFile* file, BlockMeta* meta) {
@@ -121,7 +121,7 @@ public:
 
     uint64_t file_read_off = rounddown512(meta->offset[col_id_]);                                 // offset对齐
     size_t compressed_buf_sz = roundup512(meta->compress_sz[col_id_] + (offset - file_read_off)); // 预留足够的空间
-    auto buf = reinterpret_cast<char*>(BuddyThreadHeap::get_instance()->alloc(compressed_buf_sz));
+    auto buf = reinterpret_cast<char*>(naive_alloc(compressed_buf_sz));
     char* compressed_data = buf;
 
     struct stat st;
@@ -141,7 +141,7 @@ public:
     compressed_data += (offset - file_read_off); // 偏移修正
     auto ret = decompress_func(compressed_data, (char*)data_, compress_sz, meta->origin_sz[col_id_]);
     LOG_ASSERT(ret == (int)meta->origin_sz[col_id_], "uncompress error");
-    BuddyThreadHeap::get_instance()->free_local(data_buf);
+    naive_free(data_buf);
   }
 
   void Get(int idx, ColumnValue& value) {
@@ -215,18 +215,18 @@ public:
     uint64_t writesz1 = cnt * sizeof(lens_[0]);
     uint64_t writesz2 = data_.size();
     uint64_t input_sz = writesz1 + writesz2;
-    char* origin = reinterpret_cast<char*>(BuddyThreadHeap::get_instance()->alloc(input_sz));
+    char* origin = reinterpret_cast<char*>(naive_alloc(input_sz));
     memcpy(origin, lens_, writesz1);
     memcpy(origin + writesz1, data_.c_str(), writesz2);
     uint64_t compress_buf_sz = max_dest_size_func(input_sz);
-    char* compress_buf = reinterpret_cast<char*>(BuddyThreadHeap::get_instance()->alloc(compress_buf_sz));
+    char* compress_buf = reinterpret_cast<char*>(naive_alloc(compress_buf_sz));
     uint64_t compress_sz = compress_func((const char*)origin, input_sz, compress_buf, compress_buf_sz);
 
     uint64_t off;
     buffer->write(compress_buf, compress_sz, off);
 
-    BuddyThreadHeap::get_instance()->free_local(origin);
-    BuddyThreadHeap::get_instance()->free_local(compress_buf);
+    naive_free(origin);
+    naive_free(compress_buf);
 
     meta->offset[col_id_] = off;
     meta->origin_sz[col_id_] = input_sz;
@@ -246,9 +246,9 @@ public:
     size_t compressed_buf_sz = roundup512(meta->compress_sz[col_id_] + (offset - file_read_off)); // 预留足够的空间
     size_t origin_buf_sz = meta->origin_sz[col_id_];
 
-    char* compress_buf = reinterpret_cast<char*>(BuddyThreadHeap::get_instance()->alloc(compressed_buf_sz));
+    char* compress_buf = reinterpret_cast<char*>(naive_alloc(compressed_buf_sz));
     char* compress_data = compress_buf;
-    char* origin_buf = reinterpret_cast<char*>(BuddyThreadHeap::get_instance()->alloc(origin_buf_sz));
+    char* origin_buf = reinterpret_cast<char*>(naive_alloc(origin_buf_sz));
 
     if (LIKELY(buffer == nullptr) || buffer->empty() || offset + compress_sz <= buffer->FlushedSz()) {
       // 全部在文件里面
@@ -289,8 +289,8 @@ public:
       offsets_[i + 1] = offset;
     }
 
-    BuddyThreadHeap::get_instance()->free_local(compress_buf);
-    BuddyThreadHeap::get_instance()->free_local(origin_buf);
+    naive_free(compress_buf);
+    naive_free(origin_buf);
   }
 
   // 可以考虑减少一次拷贝
@@ -303,7 +303,7 @@ public:
     uint64_t file_read_off = rounddown512(meta->offset[col_id_]);                                 // offset对齐
     size_t compressed_buf_sz = roundup512(meta->compress_sz[col_id_] + (offset - file_read_off)); // 预留足够的空间
 
-    char* compress_buf = reinterpret_cast<char*>(BuddyThreadHeap::get_instance()->alloc(compressed_buf_sz));
+    char* compress_buf = reinterpret_cast<char*>(naive_alloc(compressed_buf_sz));
     char* compress_data = compress_buf;
 
     // 全部在文件里面
@@ -322,7 +322,7 @@ public:
     size_t compress_sz = meta->compress_sz[col_id_];
 
     size_t origin_buf_sz = meta->origin_sz[col_id_];
-    char* origin_buf = reinterpret_cast<char*>(BuddyThreadHeap::get_instance()->alloc(origin_buf_sz));
+    char* origin_buf = reinterpret_cast<char*>(naive_alloc(origin_buf_sz));
 
     char* compress_data = data_buf;
 
@@ -339,8 +339,8 @@ public:
       offsets_[i + 1] = offset;
     }
 
-    BuddyThreadHeap::get_instance()->free_local(data_buf);
-    BuddyThreadHeap::get_instance()->free_local(origin_buf);
+    naive_free(data_buf);
+    naive_free(origin_buf);
   }
 
   void Get(int idx, ColumnValue& value) {

@@ -147,9 +147,9 @@ int TSDBEngineImpl::connect() {
   }
   LOG_INFO("load latest row cache finished");
 
-  mem_pool_addr_ = std::aligned_alloc(512, kMemoryPoolSz);
-  ENSURE(mem_pool_addr_ != nullptr, "invalid mem_pool_addr");
-  InitMemPool(mem_pool_addr_, kMemoryPoolSz, 512 * KB);
+  // mem_pool_addr_ = std::aligned_alloc(512, kMemoryPoolSz);
+  // ENSURE(mem_pool_addr_ != nullptr, "invalid mem_pool_addr");
+  // InitMemPool(mem_pool_addr_, kMemoryPoolSz, 2 * MB);
 
   coro_pool_->registerPollingFunc(std::bind(&IOManager::PollingIOEvents, io_mgr_));
   coro_pool_->start();
@@ -273,9 +273,9 @@ int TSDBEngineImpl::shutdown() {
     }
   }
 
-  DestroyMemPool();
-  std::free(mem_pool_addr_);
-  mem_pool_addr_ = nullptr;
+  // DestroyMemPool();
+  // std::free(mem_pool_addr_);
+  // mem_pool_addr_ = nullptr;
 
   return 0;
 }
@@ -334,7 +334,12 @@ int TSDBEngineImpl::executeTimeRangeQuery(const TimeRangeQueryRequest& trReadReq
   fillColids(trReadReq.requestedColumns, colids);
 
   uint16_t vid = getVidForRead(trReadReq.vin);
-  if (vid == UINT16_MAX) {
+  if (UNLIKELY(vid == UINT16_MAX)) {
+    return 0;
+  }
+
+  if (UNLIKELY(trReadReq.timeUpperBound <= trReadReq.timeLowerBound)) {
+    LOG_ERROR("invliad time range [%ld, %ld)", trReadReq.timeLowerBound, trReadReq.timeUpperBound);
     return 0;
   }
 
@@ -350,7 +355,7 @@ int TSDBEngineImpl::executeTimeRangeQuery(const TimeRangeQueryRequest& trReadReq
 
 #ifdef ENABLE_STAT
   auto tq = time_range_query_cnt.load();
-  if (tq % 1000 == 0) {
+  if (tq % 100000 == 0) {
     LOG_DEBUG("time range %ld", tq);
   }
 #endif
@@ -381,7 +386,7 @@ int TSDBEngineImpl::executeAggregateQuery(const TimeRangeAggregationRequest& agg
   wg.Wait();
 #ifdef ENABLE_STAT
   auto tq = agg_query_cnt.load();
-  if (tq % 1000 == 0) {
+  if (tq % 100000 == 0) {
     LOG_DEBUG("agg %ld", tq);
   }
 #endif
@@ -412,7 +417,7 @@ int TSDBEngineImpl::executeDownsampleQuery(const TimeRangeDownsampleRequest& dow
   wg.Wait();
 #ifdef ENABLE_STAT
   auto tq = downsample_query_cnt.load();
-  if (tq % 1000 == 0) {
+  if (tq % 100000 == 0) {
     LOG_DEBUG("downsample %ld", tq);
   }
 #endif

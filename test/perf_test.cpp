@@ -16,6 +16,7 @@
 #include "struct/Vin.h"
 #include "test.hpp"
 #include "util/logging.h"
+#include "util/stat.h"
 
 /**
  * 把文件夹中的文件删除掉
@@ -56,7 +57,7 @@ static int createTable(LindormContest::TSDBEngine* engine) {
   return 0;
 }
 
-static constexpr int kVinNum = LindormContest::kVinNum / 10;
+static constexpr int kVinNum = LindormContest::kVinNum;
 static constexpr int kRowsPerVin = 600;
 
 static bool RowEquals(const LindormContest::Row& a, const LindormContest::Row& b) {
@@ -534,9 +535,10 @@ int main() {
   // create table
   ret = createTable(engine);
   LOG_ASSERT(ret == 0, "create table failed");
-
+  auto now = TIME_NOW;
   parallel_upsert(engine);
-
+  auto now2 = TIME_NOW;
+  LOG_INFO("Write Use :%ld us", TIME_DURATION_US(now, now2));
   parallel_test_latest(engine);
   parallel_test_time_range(engine);
 

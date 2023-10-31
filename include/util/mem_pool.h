@@ -9,6 +9,10 @@
 
 #include "concurrent_queue.h"
 
+static inline void* naive_alloc(size_t sz) { return std::aligned_alloc(512, sz); }
+
+static inline void naive_free(void* addr) { std::free(addr); }
+
 // #define GLOBAL_MEM_POOL_DEBUG
 constexpr size_t LOG_GLOBAL_MEM_POOL_BUDDY_UNIT = 6;
 constexpr size_t GLOBAL_MEM_POOL_BUDDY_UNIT = (1 << (LOG_GLOBAL_MEM_POOL_BUDDY_UNIT));

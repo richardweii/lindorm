@@ -2,6 +2,8 @@
 
 #include <mutex>
 #include <stdexcept>
+#include "util/likely.h"
+#include "util/logging.h"
 MemPool* global_mem_pool = nullptr;
 
 volatile bool inited = false;
@@ -42,7 +44,7 @@ void* MemPool::alloc_chunk() {
     first_free_id_ = next_chunk_id[first_free_id_];
   }
 
-  assert(free_id);
+  ENSURE(free_id != 0, "no more free chunk");
   return (char*)(pool_addr_) + (free_id - 1) * chunk_size_;
 }
 
@@ -145,6 +147,7 @@ void BuddySystem::free(void* addr) {
 }
 
 void* BuddyThreadHeap::alloc(size_t sz) {
+  return std::aligned_alloc(512, sz);
   // 跨线程free
   // if (need_free_cnt_ == 0) {
   //   need_free_cnt_ = free_list_.try_dequeue_bulk(free_buf_, FREE_BUF_SIZE);
@@ -153,7 +156,7 @@ void* BuddyThreadHeap::alloc(size_t sz) {
   //   free_impl(free_buf_[need_free_cnt_ - 1]);
   // }
   // and then alloc
-  assert(sz < global_mem_pool->chunk_size_);
+  ENSURE(sz < global_mem_pool->chunk_size_, "sz is %zu, but chunk size is %lu", sz, global_mem_pool->chunk_size_);
   void* addr = nullptr;
 BUDDY_RETRY:
   if (active_buddy2_) {
