@@ -154,6 +154,15 @@ int TSDBEngineImpl::connect() {
   coro_pool_->registerPollingFunc(std::bind(&IOManager::PollingIOEvents, io_mgr_));
   coro_pool_->start();
   LOG_INFO("======== Finish connect!========");
+  if (!new_db) {
+    stat_thread_ = new std::thread([this]() {
+      while (!this->stop_) {
+        sleep(10); // 每30s打印一次
+        print_performance_statistic();
+        clear_performance_statistic();
+      }
+    });
+  }
   return 0;
 }
 
@@ -214,7 +223,9 @@ int TSDBEngineImpl::shutdown() {
   }
   wg.Wait();
 
-  print_summary(columns_type_, columns_name_);
+  if (new_db) {
+    print_file_summary(columns_type_, columns_name_);
+  }
   print_memory_usage();
 
   // save block meta
@@ -273,6 +284,12 @@ int TSDBEngineImpl::shutdown() {
     }
   }
 
+  if (!new_db) {
+    ENSURE(stat_thread_ != nullptr, "invalid stat thread");
+    this->stop_ = true;
+    stat_thread_->join();
+  }
+
   // DestroyMemPool();
   // std::free(mem_pool_addr_);
   // mem_pool_addr_ = nullptr;
@@ -289,8 +306,8 @@ int TSDBEngineImpl::write(const WriteRequest& writeRequest) {
     LOG_ASSERT(vid != UINT16_MAX, "error");
     inflight_write_.Add();
     coro_pool_->enqueue(
-      [this, shard, vid, row]() {
-        shards_[shard]->Write(vid, row);
+      [this, shard, vid, r = std::move(row)]() {
+        shards_[shard]->Write(vid, r);
         inflight_write_.Done();
       },
       shard2tid(shard));
@@ -304,26 +321,39 @@ int TSDBEngineImpl::executeLatestQuery(const LatestQueryRequest& pReadReq, std::
   std::vector<int> colids;
   fillColids(pReadReq.requestedColumns, colids);
 
-  WaitGroup wg(pReadReq.vins.size());
+  WaitGroup wg;
   std::mutex mt;
+  std::vector<std::vector<uint16_t>> vids(kWorkerThread);
   for (const auto& vin : pReadReq.vins) {
     uint16_t vid = getVidForRead(vin);
     if (vid == UINT16_MAX) {
-      wg.Done();
       continue;
     }
     int shard = sharding(vid);
+    int tid = shard2tid(shard);
+    vids[tid].push_back(vid);
+  }
+
+  for (int tid = 0; tid < kWorkerThread; tid++) {
+    if (vids[tid].empty()) {
+      continue;
+    }
+    wg.Add();
     coro_pool_->enqueue(
-      [this, shard, vid, &colids, &wg, &pReadRes, &mt]() {
-        Row row;
-        shards_[shard]->GetLatestRow(vid, colids, row);
-        mt.lock();
-        pReadRes.push_back(std::move(row));
-        mt.unlock();
+      [this, vs = vids[tid], &colids, &wg, &pReadRes, &mt]() {
+        for (auto vid : vs) {
+          int shard = sharding(vid);
+          Row row;
+          shards_[shard]->GetLatestRow(vid, colids, row);
+          mt.lock();
+          pReadRes.push_back(std::move(row));
+          mt.unlock();
+        }
         wg.Done();
       },
-      shard2tid(shard));
+      tid);
   }
+
   wg.Wait();
   return 0;
 }
@@ -335,11 +365,6 @@ int TSDBEngineImpl::executeTimeRangeQuery(const TimeRangeQueryRequest& trReadReq
 
   uint16_t vid = getVidForRead(trReadReq.vin);
   if (UNLIKELY(vid == UINT16_MAX)) {
-    return 0;
-  }
-
-  if (UNLIKELY(trReadReq.timeUpperBound <= trReadReq.timeLowerBound)) {
-    LOG_ERROR("invliad time range [%ld, %ld)", trReadReq.timeLowerBound, trReadReq.timeUpperBound);
     return 0;
   }
 
@@ -443,8 +468,8 @@ uint16_t TSDBEngineImpl::getVidForRead(const Vin& vin) {
 
 uint16_t TSDBEngineImpl::getVidForWrite(const Vin& vin) {
   uint16_t vid = UINT16_MAX;
-  vin2vid_lck_.rlock();
   std::string str(vin.vin, VIN_LENGTH);
+  vin2vid_lck_.rlock();
   auto it = vin2vid_.find(str);
   if (LIKELY(it != vin2vid_.cend())) {
     vid = it->second;

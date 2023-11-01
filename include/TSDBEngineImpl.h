@@ -87,6 +87,9 @@ private:
   void* mem_pool_addr_{nullptr};
 
   WaitGroup inflight_write_{0};
+
+  std::thread* stat_thread_{nullptr};
+  volatile bool stop_{false};
 }; // End class TSDBEngineImpl.
 
 } // namespace LindormContest

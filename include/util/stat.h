@@ -33,6 +33,11 @@ extern std::atomic<int64_t> cache_cnt;
 extern std::atomic<int64_t> data_wait_cnt;
 extern std::atomic<int64_t> lru_wait_cnt;
 extern std::atomic<int64_t> write_wait_cnt;
+extern std::atomic<int64_t> flush_wait_cnt;
+
+extern std::atomic<int64_t> alloc_time;
+extern std::atomic<int64_t> wait_aio;
+
 
 #define ENABLE_STAT
 #ifdef ENABLE_STAT
@@ -43,7 +48,9 @@ extern std::atomic<int64_t> write_wait_cnt;
 #define RECORD_ARR_FETCH_ADD(nums, idx, delta)
 #endif
 
-void print_summary(ColumnType* columnsType, std::string* columnsName);
+void print_file_summary(ColumnType* columnsType, std::string* columnsName);
 void print_row(const Row& row, uint16_t vid);
 void print_memory_usage();
+void print_performance_statistic();
+void clear_performance_statistic();
 } // namespace LindormContest

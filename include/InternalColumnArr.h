@@ -55,7 +55,10 @@ public:
     uint64_t input_sz = cnt * sizeof(T);
     uint64_t compress_buf_sz = max_dest_size_func(input_sz);
 
+    auto now = TIME_NOW;
     auto compress_buf = reinterpret_cast<char*>(naive_alloc(compress_buf_sz));
+    auto now2 = TIME_NOW;
+    RECORD_FETCH_ADD(alloc_time, TIME_DURATION_US(now, now2));
     uint64_t compress_sz = compress_func((const char*)data_, input_sz, compress_buf, compress_buf_sz);
 
     buffer->write(compress_buf, compress_sz, offset);
@@ -215,11 +218,18 @@ public:
     uint64_t writesz1 = cnt * sizeof(lens_[0]);
     uint64_t writesz2 = data_.size();
     uint64_t input_sz = writesz1 + writesz2;
+    auto now = TIME_NOW;
     char* origin = reinterpret_cast<char*>(naive_alloc(input_sz));
+    auto now2 = TIME_NOW;
+    RECORD_FETCH_ADD(alloc_time, TIME_DURATION_US(now, now2));
     memcpy(origin, lens_, writesz1);
     memcpy(origin + writesz1, data_.c_str(), writesz2);
     uint64_t compress_buf_sz = max_dest_size_func(input_sz);
+    auto now11 = TIME_NOW;
     char* compress_buf = reinterpret_cast<char*>(naive_alloc(compress_buf_sz));
+    auto now111 = TIME_NOW;
+    RECORD_FETCH_ADD(alloc_time, TIME_DURATION_US(now11, now111));
+
     uint64_t compress_sz = compress_func((const char*)origin, input_sz, compress_buf, compress_buf_sz);
 
     uint64_t off;

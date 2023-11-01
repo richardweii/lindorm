@@ -31,6 +31,10 @@ std::atomic<int64_t> cache_cnt{0};
 std::atomic<int64_t> data_wait_cnt{0};
 std::atomic<int64_t> lru_wait_cnt{0};
 std::atomic<int64_t> write_wait_cnt{0};
+std::atomic<int64_t> flush_wait_cnt{0};
+
+std::atomic<int64_t> alloc_time{0};
+std::atomic<int64_t> wait_aio{0};
 
 std::string types[] = {
   "NULL",
@@ -39,16 +43,10 @@ std::string types[] = {
   "double",
 };
 
-void print_summary(ColumnType* columnsType, std::string* columnsName) {
-  LOG_INFO("*********STAT SUMMARY*********");
-  LOG_INFO("write_cnt: %ld", write_cnt.load());
-  LOG_INFO("write wait cnt: %ld", write_wait_cnt.load());
-  LOG_INFO("latest_query_cnt: %ld", latest_query_cnt.load());
-  LOG_INFO("time_range_query_cnt: %ld", time_range_query_cnt.load());
-  LOG_INFO("agg_query_cnt: %ld", agg_query_cnt.load());
-  LOG_INFO("downsample_query_cnt: %ld", downsample_query_cnt.load());
-  LOG_INFO("tr_memtable_blk_query_cnt: %ld", tr_memtable_blk_query_cnt.load());
-  LOG_INFO("tr_disk_blk_query_cnt: %ld", tr_disk_blk_query_cnt.load());
+void print_file_summary(ColumnType* columnsType, std::string* columnsName) {
+  LOG_INFO("*********FILE SUMMARY*********");
+  LOG_INFO("write_cnt: %ld, write wait cnt: %ld, flush wait cnt: %ld", write_cnt.load(), write_wait_cnt.load(),
+           flush_wait_cnt.load());
   for (int i = 0; i < kColumnNum; i++) {
     LOG_INFO("col %d col_name %s, col_type %s, origin_sz %ld MB, compress_sz %ld MB compress rate is %f", i,
              columnsName[i].c_str(), types[columnsType[i]].c_str(), origin_szs[i].load() / MB,
@@ -58,9 +56,20 @@ void print_summary(ColumnType* columnsType, std::string* columnsName) {
     LOG_INFO("col %d, origin_sz %ld MB, compress_sz %ld MB compress rate is %f", i, origin_szs[i].load() / MB,
              compress_szs[i].load() / MB, (compress_szs[i] * 1.0) / (origin_szs[i] * 1.0));
   }
-  LOG_INFO("ReadCache Hit: %ld, MISS: %ld, HitRate: %lf", cache_hit.load(), cache_cnt.load() - cache_hit.load(),
-           cache_hit.load() * 1.0 / cache_cnt.load());
-  LOG_INFO("ReadCache data wait :%ld, lru wait %ld", data_wait_cnt.load(), lru_wait_cnt.load());
+}
+
+void print_performance_statistic() {
+  LOG_INFO("*********PERFORMANCE STAT SUMMARY*********");
+  LOG_INFO(
+    "\n====================latest_query_cnt: %ld\n====================time_range_query_cnt: "
+    "%ld\n====================agg_query_cnt: %ld\n====================downsample_query_cnt: "
+    "%ld\n====================ReadCache Hit: %ld, MISS: "
+    "%ld, HitRate: %lf\n====================ReadCache data wait :%ld, lru wait %ld\n====================Alloc time: "
+    "%ld\n====================wait aio :%ld",
+    latest_query_cnt.load(), time_range_query_cnt.load(), agg_query_cnt.load(), downsample_query_cnt.load(),
+    cache_hit.load(), cache_cnt.load() - cache_hit.load(), cache_hit.load() * 1.0 / cache_cnt.load(),
+    data_wait_cnt.load(), lru_wait_cnt.load(), alloc_time.load(), wait_aio.load());
+  LOG_INFO("*******************************************");
 }
 
 void print_row(const Row& row, uint16_t vid) {
@@ -127,4 +136,18 @@ void print_memory_usage() {
   LOG_INFO("use %f MB memory", num);
 }
 
+void clear_performance_statistic() {
+  write_cnt = 0;
+  latest_query_cnt = 0;
+  time_range_query_cnt = 0;
+  agg_query_cnt = 0;
+  downsample_query_cnt = 0;
+  tr_disk_blk_query_cnt = 0; // time range遍历的磁盘块的总数
+
+  cache_hit = 0;
+  cache_cnt = 0;
+  data_wait_cnt = 0;
+  lru_wait_cnt = 0;
+  alloc_time = 0;
+};
 } // namespace LindormContest

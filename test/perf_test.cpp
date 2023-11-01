@@ -58,7 +58,7 @@ static int createTable(LindormContest::TSDBEngine* engine) {
 }
 
 static constexpr int kVinNum = LindormContest::kVinNum;
-static constexpr int kRowsPerVin = 600;
+static constexpr int kRowsPerVin = 100 * 60;
 
 static bool RowEquals(const LindormContest::Row& a, const LindormContest::Row& b) {
   if (a != b) return false;
@@ -523,61 +523,76 @@ void parallel_downsample(LindormContest::TSDBEngine* engine, LindormContest::Agg
   LOG_INFO("parallel test time range PASS");
 }
 
-int main() {
+int main(int argc, char** argv) {
   std::string dataPath = "/tmp/tsdb_test";
-  clearTempFolder(dataPath);
-  LindormContest::TSDBEngine* engine = new LindormContest::TSDBEngineImpl(dataPath);
+  bool create = argc == 1;
+  if (create) {
+    clearTempFolder(dataPath);
+  }
+  LindormContest::TSDBEngine* engine = nullptr;
+  
+  if (create) {
+    engine = new LindormContest::TSDBEngineImpl(dataPath);
 
-  // connect
-  int ret = engine->connect();
-  LOG_ASSERT(ret == 0, "connect failed");
+    // connect
+    int ret = engine->connect();
+    LOG_ASSERT(ret == 0, "connect failed");
+    // create table
+    ret = createTable(engine);
+    LOG_ASSERT(ret == 0, "create table failed");
+    {
+      auto now = TIME_NOW;
+      parallel_upsert(engine);
+      auto now2 = TIME_NOW;
+      LOG_INFO("============== [RESLUT] ================ Write Use :%ld ms", TIME_DURATION_US(now, now2) / 1000);
+    }
 
-  // create table
-  ret = createTable(engine);
-  LOG_ASSERT(ret == 0, "create table failed");
-  auto now = TIME_NOW;
-  parallel_upsert(engine);
-  auto now2 = TIME_NOW;
-  LOG_INFO("Write Use :%ld us", TIME_DURATION_US(now, now2));
-  parallel_test_latest(engine);
-  parallel_test_time_range(engine);
-
-  parallel_agg(engine, LindormContest::AVG, 0);
-  parallel_agg(engine, LindormContest::AVG, 1);
-  parallel_agg(engine, LindormContest::MAX, 0);
-  parallel_agg(engine, LindormContest::MAX, 1);
-
-  parallel_downsample(engine, LindormContest::AVG, 0, 0);
-  parallel_downsample(engine, LindormContest::AVG, 0, 0);
-  parallel_downsample(engine, LindormContest::AVG, 1, 0);
-  parallel_downsample(engine, LindormContest::AVG, 1, 0);
-  parallel_downsample(engine, LindormContest::MAX, 0, 1);
-  parallel_downsample(engine, LindormContest::MAX, 0, 1);
-  parallel_downsample(engine, LindormContest::MAX, 1, 1);
-  parallel_downsample(engine, LindormContest::MAX, 1, 1);
-
-  LOG_INFO("start shutdown...");
-  engine->shutdown();
-  delete engine;
-  LOG_INFO("shutdown finished");
+    LOG_INFO("start shutdown...");
+    engine->shutdown();
+    delete engine;
+    LOG_INFO("shutdown finished");
+  }
 
   LOG_INFO("start connect...");
   engine = new LindormContest::TSDBEngineImpl(dataPath);
   engine->connect();
   LOG_INFO("start connect finished");
 
-  parallel_test_latest(engine);
-  parallel_test_time_range(engine);
+  {
+    auto now = TIME_NOW;
+    parallel_test_latest(engine);
+    auto now2 = TIME_NOW;
+    LOG_INFO("============== [RESLUT] ================ parallel_test_latest Use :%ld ms", TIME_DURATION_US(now, now2) / 1000);
+  }
+  {
+    auto now = TIME_NOW;
+    parallel_test_time_range(engine);
+    auto now2 = TIME_NOW;
+    LOG_INFO("============== [RESLUT] ================ parallel_test_time_range Use :%ld ms", TIME_DURATION_US(now, now2) / 1000);
+  }
+  {
+    auto now = TIME_NOW;
+    parallel_agg(engine, LindormContest::AVG, 0);
+    parallel_agg(engine, LindormContest::AVG, 1);
+    parallel_agg(engine, LindormContest::MAX, 0);
+    parallel_agg(engine, LindormContest::MAX, 1);
+    auto now2 = TIME_NOW;
+    LOG_INFO("============== [RESLUT] ================ parallel_agg Use :%ld ms", TIME_DURATION_US(now, now2) / 1000);
+  }
 
-  parallel_downsample(engine, LindormContest::AVG, 0, 0);
-  parallel_downsample(engine, LindormContest::AVG, 0, 0);
-  parallel_downsample(engine, LindormContest::AVG, 1, 0);
-  parallel_downsample(engine, LindormContest::AVG, 1, 0);
-  parallel_downsample(engine, LindormContest::MAX, 0, 1);
-  parallel_downsample(engine, LindormContest::MAX, 0, 1);
-  parallel_downsample(engine, LindormContest::MAX, 1, 1);
-  parallel_downsample(engine, LindormContest::MAX, 1, 1);
-
+  {
+    auto now = TIME_NOW;
+    parallel_downsample(engine, LindormContest::AVG, 0, 0);
+    parallel_downsample(engine, LindormContest::AVG, 0, 0);
+    parallel_downsample(engine, LindormContest::AVG, 1, 0);
+    parallel_downsample(engine, LindormContest::AVG, 1, 0);
+    parallel_downsample(engine, LindormContest::MAX, 0, 1);
+    parallel_downsample(engine, LindormContest::MAX, 0, 1);
+    parallel_downsample(engine, LindormContest::MAX, 1, 1);
+    parallel_downsample(engine, LindormContest::MAX, 1, 1);
+    auto now2 = TIME_NOW;
+    LOG_INFO("============== [RESLUT] ================ parallel_downsample Use :%ld ms", TIME_DURATION_US(now, now2) / 1000);
+  }
   engine->shutdown();
   LOG_INFO("PASS!!!");
 }

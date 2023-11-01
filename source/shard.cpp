@@ -6,7 +6,7 @@
 namespace LindormContest {
 
 void ReadCache::evictForPut() {
-  while (total_sz_>= max_sz_) {
+  while (total_sz_ >= max_sz_) {
     // 缓存已满
     while (lru_list_.empty()) {
       RECORD_FETCH_ADD(lru_wait_cnt, 1);
@@ -240,7 +240,7 @@ void ShardImpl::GetLatestRow(uint16_t vid, const std::vector<int>& colids, OUT R
   row.timestamp = latest_ts_cache_[svid];
   memcpy(row.vin.vin, engine_->vid2vin_[vid].c_str(), VIN_LENGTH);
   for (auto col_id : colids) {
-//    ColumnValue col_value;
+    //    ColumnValue col_value;
     auto& col_name = engine_->columns_name_[col_id];
     row.columns.insert(std::make_pair(col_name, latest_ts_cols_[svid][col_id]));
   }
@@ -248,9 +248,11 @@ void ShardImpl::GetLatestRow(uint16_t vid, const std::vector<int>& colids, OUT R
   LOG_ASSERT(row.timestamp != -1, "???");
 };
 
-// TODO: 如果需要从文件读取的列过多，可以考虑控制小batch读取，以免同时分配了过多cache外的内存，导致出现死锁状态，参考lru_wait_cnt指标
+// TODO:
+// 如果需要从文件读取的列过多，可以考虑控制小batch读取，以免同时分配了过多cache外的内存，导致出现死锁状态，参考lru_wait_cnt指标
 void ShardImpl::GetRowsFromTimeRange(uint64_t vid, int64_t lowerInclusive, int64_t upperExclusive,
                                      const std::vector<int>& colids, std::vector<Row>& results) {
+  results.reserve((upperExclusive - lowerInclusive) / 1000);
   if (UNLIKELY(write_phase_)) {
     memtable_->GetRowsFromTimeRange(vid, lowerInclusive, upperExclusive, colids, results);
   }
@@ -318,6 +320,7 @@ void ShardImpl::GetRowsFromTimeRange(uint64_t vid, int64_t lowerInclusive, int64
 
         // 同时下发多个异步读IO
         while (async_rf->avalibaleIOC() < need_read_from_file.size()) {
+          RECORD_FETCH_ADD(wait_aio, 1);
           async_rf->waitIOC();
         }
         for (auto& col : need_read_from_file) {
@@ -361,7 +364,7 @@ void ShardImpl::GetRowsFromTimeRange(uint64_t vid, int64_t lowerInclusive, int64
         read_cache_->Release(blk_meta, colids[i], cols[i]);
       }
 
-      for (auto &col : need_read_from_file) {
+      for (auto& col : need_read_from_file) {
         auto string_col = dynamic_cast<StringArrWrapper*>(col);
         if (UNLIKELY(string_col != nullptr)) {
           read_cache_->ReviseCacheSize(string_col);

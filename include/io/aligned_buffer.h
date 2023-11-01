@@ -13,6 +13,7 @@
 #include "io/file.h"
 #include "util/logging.h"
 #include "util/mem_pool.h"
+#include "util/stat.h"
 
 namespace LindormContest {
 
@@ -37,6 +38,7 @@ public:
 
   void write(char* compressed_data, int len, OUT uint64_t& file_offset) {
     while (in_flush_) {
+      RECORD_FETCH_ADD(flush_wait_cnt, 1);
       cv_.wait(); // 休眠当前协程，等待另一个协程对buf的flush结束
     }
     LOG_ASSERT(offset_ <= kWriteBufferSize, "offset = %d", offset_);

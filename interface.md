@@ -76,3 +76,6 @@
 + 本接口必须支持并发调用（Multi-thread friendly）
 + 关于该接口行为详细说明，可参考 `TSDBEngine#executeDownsampleQuery()` 接口注释中的示例
   
+
+
+查询线程数都是 16，时间范围不一样，timerange 是 10 分钟，aggregate 是 3 小时，downsample 是 1 小时
