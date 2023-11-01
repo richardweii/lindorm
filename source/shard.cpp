@@ -5,11 +5,8 @@
 
 namespace LindormContest {
 
-Status ReadCache::PutColumn(BlockMeta* meta, uint8_t colid, ColumnArrWrapper* col_data) {
-  Col key = {.ptr = meta, .colid = colid};
-  LOG_ASSERT(col_data->TotalSize() <= max_sz_, "ColumnArrWrapper is too big.");
-
-  while (total_sz_ + col_data->TotalSize() >= max_sz_) {
+void ReadCache::evictForPut() {
+  while (total_sz_>= max_sz_) {
     // 缓存已满
     while (lru_list_.empty()) {
       RECORD_FETCH_ADD(lru_wait_cnt, 1);
@@ -24,9 +21,16 @@ Status ReadCache::PutColumn(BlockMeta* meta, uint8_t colid, ColumnArrWrapper* co
     lru_list_.pop_back();
     cache_.erase(victim);
   }
+}
+
+Status ReadCache::PutColumn(BlockMeta* meta, uint8_t colid, ColumnArrWrapper* col_data) {
+  Col key = {.ptr = meta, .colid = colid};
+  LOG_ASSERT(col_data->TotalSize() <= max_sz_, "ColumnArrWrapper is too big.");
+
+  total_sz_ += col_data->TotalSize();
+  evictForPut();
 
   // 插入新元素到缓存和链表头部
-  total_sz_ += col_data->TotalSize();
   prepared_list_.push_front(key);
   cache_[key] = prepared_list_.begin();
   cache_[key]->column_arr = col_data;
@@ -166,6 +170,7 @@ void ShardImpl::Write(uint16_t vid, const Row& row) {
   // LOG_DEBUG("write shard %d vid", vid);
   int svid = vid2svid(vid);
   while (memtable_->in_flush_) { // 有可能不停的有协程在flush,所以要用while保证是可用的memtable
+    RECORD_FETCH_ADD(write_wait_cnt, 1);
     memtable_->cv_.wait();
   }
   if (memtable_->Write(svid, row)) {
@@ -235,7 +240,7 @@ void ShardImpl::GetLatestRow(uint16_t vid, const std::vector<int>& colids, OUT R
   row.timestamp = latest_ts_cache_[svid];
   memcpy(row.vin.vin, engine_->vid2vin_[vid].c_str(), VIN_LENGTH);
   for (auto col_id : colids) {
-    ColumnValue col_value;
+//    ColumnValue col_value;
     auto& col_name = engine_->columns_name_[col_id];
     row.columns.insert(std::make_pair(col_name, latest_ts_cols_[svid][col_id]));
   }
@@ -243,6 +248,7 @@ void ShardImpl::GetLatestRow(uint16_t vid, const std::vector<int>& colids, OUT R
   LOG_ASSERT(row.timestamp != -1, "???");
 };
 
+// TODO: 如果需要从文件读取的列过多，可以考虑控制小batch读取，以免同时分配了过多cache外的内存，导致出现死锁状态，参考lru_wait_cnt指标
 void ShardImpl::GetRowsFromTimeRange(uint64_t vid, int64_t lowerInclusive, int64_t upperExclusive,
                                      const std::vector<int>& colids, std::vector<Row>& results) {
   if (UNLIKELY(write_phase_)) {
@@ -353,6 +359,13 @@ void ShardImpl::GetRowsFromTimeRange(uint64_t vid, int64_t lowerInclusive, int64
       read_cache_->Release(blk_meta, kColumnNum + 2, tmp_idx_col);
       for (size_t i = 0; i < colids.size(); i++) {
         read_cache_->Release(blk_meta, colids[i], cols[i]);
+      }
+
+      for (auto &col : need_read_from_file) {
+        auto string_col = dynamic_cast<StringArrWrapper*>(col);
+        if (UNLIKELY(string_col != nullptr)) {
+          read_cache_->ReviseCacheSize(string_col);
+        }
       }
     }
   }

@@ -365,7 +365,14 @@ public:
 
   const int col_id_;
 
-  size_t TotalSize() const { return sizeof(uint16_t) * kMemtableRowNum + data_.size(); }
+  size_t TotalSize() const {
+    size_t meta_sz = sizeof(ColumnArr<std::string>);
+    if (data_.empty()) {
+      // 没有填充数据的时候，先预估大小
+      return meta_sz * 2;
+    }
+    return meta_sz + data_.size();
+  }
 
 private:
   uint32_t offset_;

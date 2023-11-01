@@ -30,6 +30,7 @@ std::atomic<int64_t> cache_hit{0};
 std::atomic<int64_t> cache_cnt{0};
 std::atomic<int64_t> data_wait_cnt{0};
 std::atomic<int64_t> lru_wait_cnt{0};
+std::atomic<int64_t> write_wait_cnt{0};
 
 std::string types[] = {
   "NULL",
@@ -41,6 +42,7 @@ std::string types[] = {
 void print_summary(ColumnType* columnsType, std::string* columnsName) {
   LOG_INFO("*********STAT SUMMARY*********");
   LOG_INFO("write_cnt: %ld", write_cnt.load());
+  LOG_INFO("write wait cnt: %ld", write_wait_cnt.load());
   LOG_INFO("latest_query_cnt: %ld", latest_query_cnt.load());
   LOG_INFO("time_range_query_cnt: %ld", time_range_query_cnt.load());
   LOG_INFO("agg_query_cnt: %ld", agg_query_cnt.load());

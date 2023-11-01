@@ -2,6 +2,7 @@
 #include <unordered_map>
 
 #include "memtable.h"
+#include "util/likely.h"
 namespace LindormContest {
 
 /**
@@ -52,7 +53,18 @@ public:
 
   void Release(BlockMeta* meta, uint8_t colid, ColumnArrWrapper* data);
 
+  // 因为string类型的Column只能在数据读取之后才知道真正size，需要在再进行一次LRU修正，以免cache被string类型冲爆
+  void ReviseCacheSize(StringArrWrapper* col) {
+    size_t placeholder_sz = 2 * sizeof(ColumnArr<std::string>);
+    ENSURE(total_sz_ >= placeholder_sz, "invalid total_sz %zu", total_sz_);
+    total_sz_ -= placeholder_sz;
+    total_sz_ += col->TotalSize();
+    evictForPut();
+  }
+
 private:
+  void evictForPut();
+
   // LRU cache
   std::unordered_map<Col, std::list<Col>::iterator, ColHasher, ColEqual> cache_;
   std::list<Col> lru_list_;      // 可以evict进行剔除
@@ -155,8 +167,7 @@ private:
 
 // template implementation
 template <typename TAgg, typename TCol>
-inline void ShardImpl::aggregateImpl(const std::vector<Row>& input, const std::string& col_name,
-                                     Row &res) {
+inline void ShardImpl::aggregateImpl(const std::vector<Row>& input, const std::string& col_name, Row& res) {
   TAgg avg;
   for (auto& row : input) {
     const ColumnValue& col_val = row.columns.at(col_name);
@@ -188,7 +199,7 @@ inline void ShardImpl::downsampleImpl(const std::vector<Row>& input, const std::
   }
 
   for (size_t i = 0; i < buckets.size(); i++) {
-    auto &agg = buckets[i];
+    auto& agg = buckets[i];
     Row row;
     row.columns.emplace(std::make_pair(col_name, ColumnValue(agg.GetResult())));
     ::memcpy(row.vin.vin, input.front().vin.vin, VIN_LENGTH);
