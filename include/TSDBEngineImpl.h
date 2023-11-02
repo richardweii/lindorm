@@ -18,6 +18,8 @@
 #include "io/io_manager.h"
 #include "util/rwlock.h"
 #include "util/waitgroup.h"
+#include "util/hist.h"
+#include "util/timerx.h"
 
 namespace LindormContest {
 class ShardImpl;
@@ -81,6 +83,7 @@ private:
 
   IOManager* io_mgr_{nullptr};
   ShardImpl* shards_[kShardNum];
+  Histogram hist_[kShardNum];
   bool new_db = false;
 
   CoroutinePool* coro_pool_{nullptr};

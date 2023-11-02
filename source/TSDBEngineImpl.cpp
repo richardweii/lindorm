@@ -203,6 +203,10 @@ void TSDBEngineImpl::saveSchema() {
 
 int TSDBEngineImpl::shutdown() {
   LOG_INFO("start shutdown");
+  for(int i=1; i<kShardNum; ++i) {
+    hist_[0].Merge(hist_[i]);
+  }
+  std::cout << hist_[0].ToString();
   inflight_write_.Wait();
   // Close all resources, assuming all writing and reading process has finished.
   // No mutex is fetched by assumptions.
@@ -307,8 +311,10 @@ int TSDBEngineImpl::write(const WriteRequest& writeRequest) {
     inflight_write_.Add();
     coro_pool_->enqueue(
       [this, shard, vid, r = std::move(row)]() {
+        Timer t;
         shards_[shard]->Write(vid, r);
         inflight_write_.Done();
+        hist_[shard].Add(t.GetDurationUs());
       },
       shard2tid(shard));
   }

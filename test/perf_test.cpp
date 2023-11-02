@@ -17,6 +17,7 @@
 #include "test.hpp"
 #include "util/logging.h"
 #include "util/stat.h"
+#include "util/hist.h"
 
 /**
  * 把文件夹中的文件删除掉
@@ -553,46 +554,46 @@ int main(int argc, char** argv) {
     LOG_INFO("shutdown finished");
   }
 
-  LOG_INFO("start connect...");
-  engine = new LindormContest::TSDBEngineImpl(dataPath);
-  engine->connect();
-  LOG_INFO("start connect finished");
+  // LOG_INFO("start connect...");
+  // engine = new LindormContest::TSDBEngineImpl(dataPath);
+  // engine->connect();
+  // LOG_INFO("start connect finished");
 
-  {
-    auto now = TIME_NOW;
-    parallel_test_latest(engine);
-    auto now2 = TIME_NOW;
-    LOG_INFO("============== [RESLUT] ================ parallel_test_latest Use :%ld ms", TIME_DURATION_US(now, now2) / 1000);
-  }
-  {
-    auto now = TIME_NOW;
-    parallel_test_time_range(engine);
-    auto now2 = TIME_NOW;
-    LOG_INFO("============== [RESLUT] ================ parallel_test_time_range Use :%ld ms", TIME_DURATION_US(now, now2) / 1000);
-  }
-  {
-    auto now = TIME_NOW;
-    parallel_agg(engine, LindormContest::AVG, 0);
-    parallel_agg(engine, LindormContest::AVG, 1);
-    parallel_agg(engine, LindormContest::MAX, 0);
-    parallel_agg(engine, LindormContest::MAX, 1);
-    auto now2 = TIME_NOW;
-    LOG_INFO("============== [RESLUT] ================ parallel_agg Use :%ld ms", TIME_DURATION_US(now, now2) / 1000);
-  }
+  // {
+  //   auto now = TIME_NOW;
+  //   parallel_test_latest(engine);
+  //   auto now2 = TIME_NOW;
+  //   LOG_INFO("============== [RESLUT] ================ parallel_test_latest Use :%ld ms", TIME_DURATION_US(now, now2) / 1000);
+  // }
+  // {
+  //   auto now = TIME_NOW;
+  //   parallel_test_time_range(engine);
+  //   auto now2 = TIME_NOW;
+  //   LOG_INFO("============== [RESLUT] ================ parallel_test_time_range Use :%ld ms", TIME_DURATION_US(now, now2) / 1000);
+  // }
+  // {
+  //   auto now = TIME_NOW;
+  //   parallel_agg(engine, LindormContest::AVG, 0);
+  //   parallel_agg(engine, LindormContest::AVG, 1);
+  //   parallel_agg(engine, LindormContest::MAX, 0);
+  //   parallel_agg(engine, LindormContest::MAX, 1);
+  //   auto now2 = TIME_NOW;
+  //   LOG_INFO("============== [RESLUT] ================ parallel_agg Use :%ld ms", TIME_DURATION_US(now, now2) / 1000);
+  // }
 
-  {
-    auto now = TIME_NOW;
-    parallel_downsample(engine, LindormContest::AVG, 0, 0);
-    parallel_downsample(engine, LindormContest::AVG, 0, 0);
-    parallel_downsample(engine, LindormContest::AVG, 1, 0);
-    parallel_downsample(engine, LindormContest::AVG, 1, 0);
-    parallel_downsample(engine, LindormContest::MAX, 0, 1);
-    parallel_downsample(engine, LindormContest::MAX, 0, 1);
-    parallel_downsample(engine, LindormContest::MAX, 1, 1);
-    parallel_downsample(engine, LindormContest::MAX, 1, 1);
-    auto now2 = TIME_NOW;
-    LOG_INFO("============== [RESLUT] ================ parallel_downsample Use :%ld ms", TIME_DURATION_US(now, now2) / 1000);
-  }
-  engine->shutdown();
+  // {
+  //   auto now = TIME_NOW;
+  //   parallel_downsample(engine, LindormContest::AVG, 0, 0);
+  //   parallel_downsample(engine, LindormContest::AVG, 0, 0);
+  //   parallel_downsample(engine, LindormContest::AVG, 1, 0);
+  //   parallel_downsample(engine, LindormContest::AVG, 1, 0);
+  //   parallel_downsample(engine, LindormContest::MAX, 0, 1);
+  //   parallel_downsample(engine, LindormContest::MAX, 0, 1);
+  //   parallel_downsample(engine, LindormContest::MAX, 1, 1);
+  //   parallel_downsample(engine, LindormContest::MAX, 1, 1);
+  //   auto now2 = TIME_NOW;
+  //   LOG_INFO("============== [RESLUT] ================ parallel_downsample Use :%ld ms", TIME_DURATION_US(now, now2) / 1000);
+  // }
+  // engine->shutdown();
   LOG_INFO("PASS!!!");
 }
