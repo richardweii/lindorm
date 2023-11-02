@@ -21,7 +21,7 @@ std::atomic<int64_t> latest_query_time{0};
 std::atomic<int64_t> time_range_query_time{0};
 
 std::atomic<int64_t> tr_memtable_blk_query_cnt{0}; // time range遍历的memtable中的block总数
-std::atomic<int64_t> tr_disk_blk_query_cnt{0};     // time range遍历的磁盘块的总数
+std::atomic<int64_t> disk_blk_access_cnt{0};       // time range遍历的磁盘块的总数
 
 std::atomic<int64_t> origin_szs[kColumnNum + kExtraColNum];
 std::atomic<int64_t> compress_szs[kColumnNum + kExtraColNum];
@@ -35,6 +35,10 @@ std::atomic<int64_t> flush_wait_cnt{0};
 
 std::atomic<int64_t> alloc_time{0};
 std::atomic<int64_t> wait_aio{0};
+std::atomic<int64_t> print_row_cnt{0};
+std::atomic<int64_t> print_tr_cnt{0};
+std::atomic<int64_t> print_agg_cnt{0};
+std::atomic<int64_t> print_ds_cnt{0};
 
 std::string types[] = {
   "NULL",
@@ -59,24 +63,24 @@ void print_file_summary(ColumnType* columnsType, std::string* columnsName) {
 }
 
 void print_performance_statistic() {
+  print_memory_usage();
   LOG_INFO("*********PERFORMANCE STAT SUMMARY*********");
   LOG_INFO(
     "\n====================latest_query_cnt: %ld\n====================time_range_query_cnt: "
     "%ld\n====================agg_query_cnt: %ld\n====================downsample_query_cnt: "
     "%ld\n====================ReadCache Hit: %ld, MISS: "
     "%ld, HitRate: %lf\n====================ReadCache data wait :%ld, lru wait %ld\n====================Alloc time: "
-    "%ld\n====================wait aio :%ld",
+    "%ld\n====================wait aio :%ld\n===================disk_blk_access_cnt :%ld",
     latest_query_cnt.load(), time_range_query_cnt.load(), agg_query_cnt.load(), downsample_query_cnt.load(),
     cache_hit.load(), cache_cnt.load() - cache_hit.load(), cache_hit.load() * 1.0 / cache_cnt.load(),
-    data_wait_cnt.load(), lru_wait_cnt.load(), alloc_time.load(), wait_aio.load());
+    data_wait_cnt.load(), lru_wait_cnt.load(), alloc_time.load(), wait_aio.load(), disk_blk_access_cnt.load());
   LOG_INFO("*******************************************");
 }
 
 void print_row(const Row& row, uint16_t vid) {
-  printf("vid %d, ts: %ld | ", vid, row.timestamp);
+  printf("@@@@@@@@@@@ vid %d, ts: %ld | ", vid, row.timestamp);
   for (auto& col : row.columns) {
-    printf("col_name %s type: %s ", col.first.c_str(), types[col.second.getColumnType()].c_str());
-    printf("val : ");
+    printf("[%s] :", col.first.c_str());
     auto col_val = col.second;
     switch (col.second.getColumnType()) {
       case COLUMN_TYPE_STRING: {
@@ -103,7 +107,7 @@ void print_row(const Row& row, uint16_t vid) {
     }
     printf(" | ");
   }
-  printf("\n");
+  printf("@@@@@@@@@@@@\n");
   fflush(stdout);
 }
 
@@ -137,13 +141,7 @@ void print_memory_usage() {
 }
 
 void clear_performance_statistic() {
-  write_cnt = 0;
-  latest_query_cnt = 0;
-  time_range_query_cnt = 0;
-  agg_query_cnt = 0;
-  downsample_query_cnt = 0;
-  tr_disk_blk_query_cnt = 0; // time range遍历的磁盘块的总数
-
+  disk_blk_access_cnt = 0; // time range遍历的磁盘块的总数
   cache_hit = 0;
   cache_cnt = 0;
   data_wait_cnt = 0;

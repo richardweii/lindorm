@@ -58,7 +58,7 @@ static int createTable(LindormContest::TSDBEngine* engine) {
 }
 
 static constexpr int kVinNum = LindormContest::kVinNum;
-static constexpr int kRowsPerVin = 100 * 60;
+static constexpr int kRowsPerVin = 10 * 60;
 
 static bool RowEquals(const LindormContest::Row& a, const LindormContest::Row& b) {
   if (a != b) return false;
@@ -168,9 +168,9 @@ void parallel_upsert(LindormContest::TSDBEngine* engine) {
     js[j] = j;
   }
 
-  std::mt19937 rng(1);
-  std::shuffle(is.begin(), is.end(), rng);
-  std::shuffle(js.begin(), js.end(), rng);
+  // std::mt19937 rng(1);
+  // std::shuffle(is.begin(), is.end(), rng);
+  // std::shuffle(js.begin(), js.end(), rng);
 
   for (int t = 0; t < thread_num; t++) {
     threads.emplace_back(

@@ -34,63 +34,34 @@
 
 class WaitGroup {
 public:
-  WaitGroup(int init = 0) : m_counter(init) {}
+    WaitGroup(int init = 0) : count(init) {}
 
-  void Add(int count = 1) { m_counter += count; }
-
-  void Done() {
-    m_counter--;
-    if (m_counter.load() <= 0) {
-      m_cond.notify_all();
+    void Add(int delta = 1) {
+        std::unique_lock<std::mutex> lock(mutex);
+        count += delta;
     }
-  }
 
-  int Cnt() { return m_counter.load(); }
-
-  void Wait() {
-    if (m_counter.load() <= 0) {
-      return;
+    void Done() {
+        std::unique_lock<std::mutex> lock(mutex);
+        count--;
+        if (count == 0) {
+            condition.notify_all();
+        }
     }
-    std::unique_lock<std::mutex> lock(m_mutex);
-    m_cond.wait(lock, [&]() { return this->m_counter.load() <= 0; });
-  }
+
+    void Wait() {
+        std::unique_lock<std::mutex> lock(mutex);
+        while (count > 0) {
+            condition.wait(lock);
+        }
+    }
+
+    int Cnt() {
+        return count;
+    }
 
 private:
-  std::mutex m_mutex;
-  std::atomic<int> m_counter;
-  std::condition_variable m_cond;
+    volatile int count;
+    std::mutex mutex;
+    std::condition_variable condition;
 };
-
-// class WaitGroup {
-// public:
-//     WaitGroup(int init = 0) : count(init) {}
-
-//     void Add(int delta = 1) {
-//         std::unique_lock<std::mutex> lock(mutex);
-//         count += delta;
-//     }
-
-//     void Done() {
-//         std::unique_lock<std::mutex> lock(mutex);
-//         count--;
-//         if (count == 0) {
-//             condition.notify_all();
-//         }
-//     }
-
-//     void Wait() {
-//         std::unique_lock<std::mutex> lock(mutex);
-//         while (count > 0) {
-//             condition.wait(lock);
-//         }
-//     }
-
-//     int Cnt() {
-//         return count;
-//     }
-
-// private:
-//     volatile int count;
-//     std::mutex mutex;
-//     std::condition_variable condition;
-// };

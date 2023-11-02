@@ -267,7 +267,7 @@ void ShardImpl::GetRowsFromTimeRange(uint64_t vid, int64_t lowerInclusive, int64
   }
 
   if (!blk_metas.empty()) {
-    RECORD_FETCH_ADD(tr_disk_blk_query_cnt, blk_metas.size());
+    RECORD_FETCH_ADD(disk_blk_access_cnt, blk_metas.size());
     std::vector<ColumnArrWrapper*> need_read_from_file;
     std::vector<char*> tmp_bufs;
     for (auto blk_meta : blk_metas) {
@@ -395,38 +395,58 @@ void ShardImpl::InitMemTable() {
 // TODO: 改成time range 过程中就计算，减少对row的构建
 void ShardImpl::AggregateQuery(uint64_t vid, int64_t lowerInclusive, int64_t upperExclusive, int colid, Aggregator op,
                                std::vector<Row>& res) {
-  // if (UNLIKELY(write_phase_)) {
-  std::vector<Row> tmp_res;
-  GetRowsFromTimeRange(vid, lowerInclusive, upperExclusive, {colid}, tmp_res);
-  // 空范围
-  if (UNLIKELY(tmp_res.empty())) {
-    return;
-  }
+  if (UNLIKELY(write_phase_)) {
+    std::vector<Row> tmp_res;
+    GetRowsFromTimeRange(vid, lowerInclusive, upperExclusive, {colid}, tmp_res);
+    // 空范围
+    if (UNLIKELY(tmp_res.empty())) {
+      return;
+    }
 
-  std::string& col_name = engine_->columns_name_[colid];
-  ColumnType t = engine_->columns_type_[colid];
-  Row row;
-  if (op == AVG) {
-    if (t == COLUMN_TYPE_INTEGER) {
-      aggregateImpl<AvgAggregate<int>, int>(tmp_res, col_name, row);
-    } else if (t == COLUMN_TYPE_DOUBLE_FLOAT) {
-      aggregateImpl<AvgAggregate<double>, double>(tmp_res, col_name, row);
-    } else {
-      LOG_ERROR("should not be STRING TYPE");
+    std::string& col_name = engine_->columns_name_[colid];
+    ColumnType t = engine_->columns_type_[colid];
+    Row row;
+    if (op == AVG) {
+      if (t == COLUMN_TYPE_INTEGER) {
+        aggregateImpl<AvgAggregate<int>, int>(tmp_res, col_name, row);
+      } else if (t == COLUMN_TYPE_DOUBLE_FLOAT) {
+        aggregateImpl<AvgAggregate<double>, double>(tmp_res, col_name, row);
+      } else {
+        LOG_ERROR("should not be STRING TYPE");
+      }
+    } else if (op == MAX) {
+      if (t == COLUMN_TYPE_INTEGER) {
+        aggregateImpl<MaxAggreate<int>, int>(tmp_res, col_name, row);
+      } else if (t == COLUMN_TYPE_DOUBLE_FLOAT) {
+        aggregateImpl<MaxAggreate<double>, double>(tmp_res, col_name, row);
+      } else {
+        LOG_ERROR("should not be STRING TYPE");
+      }
     }
-  } else if (op == MAX) {
-    if (t == COLUMN_TYPE_INTEGER) {
-      aggregateImpl<MaxAggreate<int>, int>(tmp_res, col_name, row);
-    } else if (t == COLUMN_TYPE_DOUBLE_FLOAT) {
-      aggregateImpl<MaxAggreate<double>, double>(tmp_res, col_name, row);
-    } else {
-      LOG_ERROR("should not be STRING TYPE");
+    row.timestamp = lowerInclusive;
+    ::memcpy(row.vin.vin, engine_->vid2vin_[vid].c_str(), VIN_LENGTH);
+    res.push_back(std::move(row));
+  } else {
+    std::string& col_name = engine_->columns_name_[colid];
+    ColumnType t = engine_->columns_type_[colid];
+    if (op == AVG) {
+      if (t == COLUMN_TYPE_INTEGER) {
+        aggregateImpl2<AvgAggregate<int>, int>(vid, lowerInclusive, upperExclusive, colid, res);
+      } else if (t == COLUMN_TYPE_DOUBLE_FLOAT) {
+        aggregateImpl2<AvgAggregate<double>, double>(vid, lowerInclusive, upperExclusive, colid, res);
+      } else {
+        LOG_ERROR("should not be STRING TYPE");
+      }
+    } else if (op == MAX) {
+      if (t == COLUMN_TYPE_INTEGER) {
+        aggregateImpl2<MaxAggreate<int>, int>(vid, lowerInclusive, upperExclusive, colid, res);
+      } else if (t == COLUMN_TYPE_DOUBLE_FLOAT) {
+        aggregateImpl2<MaxAggreate<double>, double>(vid, lowerInclusive, upperExclusive, colid, res);
+      } else {
+        LOG_ERROR("should not be STRING TYPE");
+      }
     }
   }
-  row.timestamp = lowerInclusive;
-  ::memcpy(row.vin.vin, engine_->vid2vin_[vid].c_str(), VIN_LENGTH);
-  res.push_back(std::move(row));
-  // }
 };
 
 void ShardImpl::DownSampleQuery(uint64_t vid, int64_t lowerInclusive, int64_t upperExclusive, int64_t interval,

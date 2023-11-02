@@ -1,6 +1,7 @@
 #pragma once
 
 #include <cstdint>
+#include <cstring>
 
 #include "util/lz4.h"
 #include "util/zstd.h"
@@ -23,6 +24,8 @@ inline uint64_t LZ4Compress(const char* data, uint64_t len, char* compress_buf, 
 
 inline uint64_t ZSTDCompress(const char* data, uint64_t len, char* compress_buf, uint64_t compress_len) {
   return ZSTD_compress((void*)compress_buf, compress_len, (const void*)data, len, 3);
+  // ::memcpy(compress_buf, data, len);
+  // return len;
 }
 
 inline int LZ4DeCompress(const char* src, char* dst, int compressedSize, int dstCapacity) {
@@ -31,6 +34,8 @@ inline int LZ4DeCompress(const char* src, char* dst, int compressedSize, int dst
 
 inline int ZSTDDeCompress(const char* src, char* dst, int compressedSize, int dstCapacity) {
   return ZSTD_decompress(dst, dstCapacity, src, compressedSize);
+  // ::memcpy(dst, src, compressedSize);
+  // return compressedSize;
 }
 
 extern MaxDestSizeFunc* max_dest_size_func;

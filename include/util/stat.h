@@ -23,7 +23,7 @@ extern std::atomic<int64_t> write_time;
 extern std::atomic<int64_t> time_range_query_time;
 
 extern std::atomic<int64_t> tr_memtable_blk_query_cnt;
-extern std::atomic<int64_t> tr_disk_blk_query_cnt;
+extern std::atomic<int64_t> disk_blk_access_cnt;
 
 extern std::atomic<int64_t> origin_szs[];
 extern std::atomic<int64_t> compress_szs[];
@@ -37,7 +37,10 @@ extern std::atomic<int64_t> flush_wait_cnt;
 
 extern std::atomic<int64_t> alloc_time;
 extern std::atomic<int64_t> wait_aio;
-
+extern std::atomic<int64_t> print_row_cnt;
+extern std::atomic<int64_t> print_tr_cnt;
+extern std::atomic<int64_t> print_agg_cnt;
+extern std::atomic<int64_t> print_ds_cnt;
 
 #define ENABLE_STAT
 #ifdef ENABLE_STAT

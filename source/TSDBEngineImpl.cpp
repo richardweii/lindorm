@@ -154,15 +154,6 @@ int TSDBEngineImpl::connect() {
   coro_pool_->registerPollingFunc(std::bind(&IOManager::PollingIOEvents, io_mgr_));
   coro_pool_->start();
   LOG_INFO("======== Finish connect!========");
-  if (!new_db) {
-    stat_thread_ = new std::thread([this]() {
-      while (!this->stop_) {
-        sleep(10); // 每30s打印一次
-        print_performance_statistic();
-        clear_performance_statistic();
-      }
-    });
-  }
   return 0;
 }
 
@@ -226,7 +217,7 @@ int TSDBEngineImpl::shutdown() {
   if (new_db) {
     print_file_summary(columns_type_, columns_name_);
   }
-  print_memory_usage();
+  print_performance_statistic();
 
   // save block meta
   for (int i = 0; i < kShardNum; i++) {
@@ -284,12 +275,6 @@ int TSDBEngineImpl::shutdown() {
     }
   }
 
-  if (!new_db) {
-    ENSURE(stat_thread_ != nullptr, "invalid stat thread");
-    this->stop_ = true;
-    stat_thread_->join();
-  }
-
   // DestroyMemPool();
   // std::free(mem_pool_addr_);
   // mem_pool_addr_ = nullptr;
@@ -299,24 +284,43 @@ int TSDBEngineImpl::shutdown() {
 
 int TSDBEngineImpl::write(const WriteRequest& writeRequest) {
   RECORD_FETCH_ADD(write_cnt, writeRequest.rows.size());
-
+  std::vector<std::vector<Row>> rows(kWorkerThread);
   for (auto& row : writeRequest.rows) {
     uint16_t vid = getVidForWrite(row.vin);
+#ifdef ENABLE_STAT
+    if (print_row_cnt.fetch_add(1) <= 15) {
+      print_row(row, vid);
+    }
+#endif
     int shard = sharding(vid);
+    int tid = shard2tid(shard);
+    rows[tid].emplace_back(std::move(row));
+
     LOG_ASSERT(vid != UINT16_MAX, "error");
-    inflight_write_.Add();
-    coro_pool_->enqueue(
-      [this, shard, vid, r = std::move(row)]() {
-        shards_[shard]->Write(vid, r);
-        inflight_write_.Done();
-      },
-      shard2tid(shard));
   }
 
+  for (int tid = 0; tid < kWorkerThread; tid++) {
+    if (rows[tid].empty()) {
+      continue;
+    }
+    inflight_write_.Add();
+    coro_pool_->enqueue(
+      [this, rs = std::move(rows[tid])]() {
+        for (auto& r : rs) {
+          uint16_t vid = getVidForRead(r.vin);
+          int shard = sharding(vid);
+          shards_[shard]->Write(vid, r);
+        }
+        inflight_write_.Done();
+      },
+      tid);
+  }
   return 0;
 }
 
 int TSDBEngineImpl::executeLatestQuery(const LatestQueryRequest& pReadReq, std::vector<Row>& pReadRes) {
+#ifdef ENABLE_STAT
+#endif
   RECORD_FETCH_ADD(latest_query_cnt, pReadReq.vins.size());
   std::vector<int> colids;
   fillColids(pReadReq.requestedColumns, colids);
@@ -359,6 +363,15 @@ int TSDBEngineImpl::executeLatestQuery(const LatestQueryRequest& pReadReq, std::
 }
 
 int TSDBEngineImpl::executeTimeRangeQuery(const TimeRangeQueryRequest& trReadReq, std::vector<Row>& trReadRes) {
+#ifdef ENABLE_STAT
+  if (print_tr_cnt.fetch_add(1) <= 10) {
+    printf("TimeRangeQueryRequest : [%ld, %ld) ", trReadReq.timeLowerBound, trReadReq.timeUpperBound);
+    for (auto& col : trReadReq.requestedColumns) {
+      printf("[%s] ", col.c_str());
+    }
+    printf("\n");
+  }
+#endif
   RECORD_FETCH_ADD(time_range_query_cnt, 1);
   std::vector<int> colids;
   fillColids(trReadReq.requestedColumns, colids);
@@ -377,19 +390,18 @@ int TSDBEngineImpl::executeTimeRangeQuery(const TimeRangeQueryRequest& trReadReq
     },
     shard2tid(shard));
   wg.Wait();
-
-#ifdef ENABLE_STAT
-  auto tq = time_range_query_cnt.load();
-  if (tq % 100000 == 0) {
-    LOG_DEBUG("time range %ld", tq);
-  }
-#endif
-
   return 0;
 }
 
 int TSDBEngineImpl::executeAggregateQuery(const TimeRangeAggregationRequest& aggregationReq,
                                           std::vector<Row>& aggregationRes) {
+#ifdef ENABLE_STAT
+  if (print_agg_cnt.fetch_add(1) <= 10) {
+    printf("TimeRangeAggregationRequest : [%ld, %ld) ", aggregationReq.timeLowerBound, aggregationReq.timeUpperBound);
+    printf("[%s] ", aggregationReq.columnName.c_str());
+    printf("\n");
+  }
+#endif
   RECORD_FETCH_ADD(agg_query_cnt, 1);
 
   uint16_t vid = getVidForRead(aggregationReq.vin);
@@ -411,15 +423,24 @@ int TSDBEngineImpl::executeAggregateQuery(const TimeRangeAggregationRequest& agg
   wg.Wait();
 #ifdef ENABLE_STAT
   auto tq = agg_query_cnt.load();
-  if (tq % 100000 == 0) {
-    LOG_DEBUG("agg %ld", tq);
+  if (tq == 30000) {
+    print_performance_statistic();
   }
 #endif
+
   return 0;
 }
 
 int TSDBEngineImpl::executeDownsampleQuery(const TimeRangeDownsampleRequest& downsampleReq,
                                            std::vector<Row>& downsampleRes) {
+#ifdef ENABLE_STAT
+  if (print_agg_cnt.fetch_add(1) <= 10) {
+    printf("TimeRangeDownsampleRequest : [%ld, %ld), interval %ld ", downsampleReq.timeLowerBound,
+           downsampleReq.timeUpperBound, downsampleReq.interval);
+    printf("[%s] ", downsampleReq.columnName.c_str());
+    printf("\n");
+  }
+#endif
   RECORD_FETCH_ADD(downsample_query_cnt, 1);
 
   uint16_t vid = getVidForRead(downsampleReq.vin);
@@ -442,8 +463,8 @@ int TSDBEngineImpl::executeDownsampleQuery(const TimeRangeDownsampleRequest& dow
   wg.Wait();
 #ifdef ENABLE_STAT
   auto tq = downsample_query_cnt.load();
-  if (tq % 100000 == 0) {
-    LOG_DEBUG("downsample %ld", tq);
+  if (tq == 1000000) {
+    print_performance_statistic();
   }
 #endif
   return 0;

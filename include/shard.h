@@ -3,6 +3,7 @@
 
 #include "memtable.h"
 #include "util/likely.h"
+#include "util/util.h"
 namespace LindormContest {
 
 /**
@@ -136,6 +137,9 @@ public:
 
 private:
   template <typename TAgg, typename TCol>
+  void aggregateImpl2(uint64_t vid, int64_t lowerInclusive, int64_t upperExclusive, int colid, std::vector<Row>& res);
+
+  template <typename TAgg, typename TCol>
   void aggregateImpl(const std::vector<Row>& input, const std::string& col_name, Row& res);
 
   template <typename TAgg, typename TCol>
@@ -168,14 +172,14 @@ private:
 // template implementation
 template <typename TAgg, typename TCol>
 inline void ShardImpl::aggregateImpl(const std::vector<Row>& input, const std::string& col_name, Row& res) {
-  TAgg avg;
+  TAgg agg;
   for (auto& row : input) {
     const ColumnValue& col_val = row.columns.at(col_name);
     ColumnValueWrapper wrapper(&col_val);
-    avg.Add(wrapper.getFixedSizeValue<TCol>());
+    agg.Add(wrapper.getFixedSizeValue<TCol>());
   }
 
-  ColumnValue res_val(avg.GetResult());
+  ColumnValue res_val(agg.GetResult());
 
   res.columns.emplace(std::make_pair(col_name, std::move(res_val)));
 };
@@ -207,4 +211,113 @@ inline void ShardImpl::downsampleImpl(const std::vector<Row>& input, const std::
     res.push_back(std::move(row));
   }
 }
+
+template <typename TAgg, typename TCol>
+inline void ShardImpl::aggregateImpl2(uint64_t vid, int64_t lowerInclusive, int64_t upperExclusive, int colid,
+                                      std::vector<Row>& res) {
+  TAgg agg;
+
+  std::vector<BlockMeta*> blk_metas;
+  block_mgr_->GetVinBlockMetasByTimeRange(vid, lowerInclusive, upperExclusive, blk_metas);
+
+  File* rfile = data_file_;
+  if (!blk_metas.empty()) {
+    RECORD_FETCH_ADD(disk_blk_access_cnt, blk_metas.size());
+    std::vector<ColumnArrWrapper*> need_read_from_file;
+    std::vector<char*> tmp_bufs;
+    for (auto blk_meta : blk_metas) {
+      // 去读对应列的block
+      need_read_from_file.clear();
+      tmp_bufs.clear();
+
+      bool hit;
+      VidArrWrapper* tmp_vid_col = read_cache_->FetchDataArr<VidArrWrapper>(blk_meta, kColumnNum, hit);
+      if (!hit) need_read_from_file.push_back(tmp_vid_col);
+
+      TsArrWrapper* tmp_ts_col = read_cache_->FetchDataArr<TsArrWrapper>(blk_meta, kColumnNum + 1, hit);
+      if (!hit) need_read_from_file.push_back(tmp_ts_col);
+
+      IdxArrWrapper* tmp_idx_col = read_cache_->FetchDataArr<IdxArrWrapper>(blk_meta, kColumnNum + 2, hit);
+      if (!hit) need_read_from_file.push_back(tmp_idx_col);
+
+      ColumnArrWrapper* agg_col = nullptr;
+
+      switch (engine_->columns_type_[colid]) {
+        case COLUMN_TYPE_STRING:
+          agg_col = read_cache_->FetchDataArr<StringArrWrapper>(blk_meta, colid, hit);
+          if (!hit) need_read_from_file.push_back(agg_col);
+          break;
+        case COLUMN_TYPE_INTEGER:
+          agg_col = read_cache_->FetchDataArr<IntArrWrapper>(blk_meta, colid, hit);
+          if (!hit) need_read_from_file.push_back(agg_col);
+          break;
+        case COLUMN_TYPE_DOUBLE_FLOAT:
+          agg_col = read_cache_->FetchDataArr<DoubleArrWrapper>(blk_meta, colid, hit);
+          if (!hit) need_read_from_file.push_back(agg_col);
+          break;
+        case COLUMN_TYPE_UNINITIALIZED:
+          LOG_ASSERT(false, "error");
+          break;
+      }
+
+      AsyncFile* async_rf = dynamic_cast<AsyncFile*>(rfile);
+      LOG_ASSERT(async_rf != nullptr, "invalid cast");
+
+      // 同时下发多个异步读IO
+      while (async_rf->avalibaleIOC() < need_read_from_file.size()) {
+        RECORD_FETCH_ADD(wait_aio, 1);
+        async_rf->waitIOC();
+      }
+      for (auto& col : need_read_from_file) {
+        // 储存用于异步IO的buf
+        tmp_bufs.push_back(col->AsyncReadCompressed(async_rf, blk_meta));
+      }
+
+      this_coroutine::co_wait(need_read_from_file.size());
+
+      int i = 0;
+      for (auto& col : need_read_from_file) {
+        col->Decompressed(tmp_bufs[i], blk_meta);
+        i++;
+      }
+
+      // 现在vid + ts是有序的，可以直接应用二分查找
+      std::vector<uint16_t> idxs;
+      std::vector<int64_t> tss;
+      findMatchingIndices(tmp_vid_col->GetDataArr(), tmp_ts_col->GetDataArr(), tmp_idx_col->GetDataArr(), blk_meta->num,
+                          vid2svid(vid), lowerInclusive, upperExclusive, idxs, tss);
+
+      if (!idxs.empty()) {
+        for (int i = 0; i < (int)idxs.size(); i++) {
+          // fill aggragate container.
+          ColumnValue col;
+          agg_col->Get(idxs[i], col);
+          ColumnValueWrapper wrapper(&col);
+          agg.Add(wrapper.getFixedSizeValue<TCol>());
+        }
+      }
+
+      read_cache_->Release(blk_meta, kColumnNum, tmp_vid_col);
+      read_cache_->Release(blk_meta, kColumnNum + 1, tmp_ts_col);
+      read_cache_->Release(blk_meta, kColumnNum + 2, tmp_idx_col);
+      read_cache_->Release(blk_meta, colid, agg_col);
+
+      for (auto& col : need_read_from_file) {
+        auto string_col = dynamic_cast<StringArrWrapper*>(col);
+        if (UNLIKELY(string_col != nullptr)) {
+          read_cache_->ReviseCacheSize(string_col);
+        }
+      }
+    }
+  }
+
+  std::string& col_name = engine_->columns_name_[colid];
+  Row r;
+  r.timestamp = lowerInclusive;
+  ::memcpy(r.vin.vin, engine_->vid2vin_[vid].c_str(), VIN_LENGTH);
+  ColumnValue res_val(agg.GetResult());
+  r.columns.emplace(std::make_pair(col_name, std::move(res_val)));
+  res.push_back(std::move(r));
+}
+
 } // namespace LindormContest

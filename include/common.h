@@ -29,7 +29,7 @@ constexpr int kWriteBufferSize = 4 * 1024 * KB;
 constexpr size_t kReadCacheSize = 32 * MB;
 constexpr int kWorkerThread = 8;
 constexpr int kCoroutinePerThread = 16;
-constexpr size_t kMemoryPoolSz = 1 * 1024 * MB; // 1GB临时内存
+// constexpr size_t kMemoryPoolSz = 1 * 1024 * MB; // 1GB临时内存
 #else
 constexpr int kColumnNum = 20;
 constexpr int kVinNum = 1024;
