@@ -36,9 +36,6 @@ std::atomic<int64_t> flush_wait_cnt{0};
 std::atomic<int64_t> alloc_time{0};
 std::atomic<int64_t> wait_aio{0};
 std::atomic<int64_t> print_row_cnt{0};
-std::atomic<int64_t> print_tr_cnt{0};
-std::atomic<int64_t> print_agg_cnt{0};
-std::atomic<int64_t> print_ds_cnt{0};
 
 std::string types[] = {
   "NULL",

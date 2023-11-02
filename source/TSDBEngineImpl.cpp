@@ -364,7 +364,8 @@ int TSDBEngineImpl::executeLatestQuery(const LatestQueryRequest& pReadReq, std::
 
 int TSDBEngineImpl::executeTimeRangeQuery(const TimeRangeQueryRequest& trReadReq, std::vector<Row>& trReadRes) {
 #ifdef ENABLE_STAT
-  if (print_tr_cnt.fetch_add(1) <= 10) {
+  int a = time_range_query_cnt.load();
+  if (a > 100000 && a <= 100010) {
     printf("TimeRangeQueryRequest : [%ld, %ld) ", trReadReq.timeLowerBound, trReadReq.timeUpperBound);
     for (auto& col : trReadReq.requestedColumns) {
       printf("[%s] ", col.c_str());
@@ -396,7 +397,8 @@ int TSDBEngineImpl::executeTimeRangeQuery(const TimeRangeQueryRequest& trReadReq
 int TSDBEngineImpl::executeAggregateQuery(const TimeRangeAggregationRequest& aggregationReq,
                                           std::vector<Row>& aggregationRes) {
 #ifdef ENABLE_STAT
-  if (print_agg_cnt.fetch_add(1) <= 10) {
+  int a = agg_query_cnt.load();
+  if (a > 10000 && a <= 10010) {
     printf("TimeRangeAggregationRequest : [%ld, %ld) ", aggregationReq.timeLowerBound, aggregationReq.timeUpperBound);
     printf("[%s] ", aggregationReq.columnName.c_str());
     printf("\n");
@@ -434,7 +436,8 @@ int TSDBEngineImpl::executeAggregateQuery(const TimeRangeAggregationRequest& agg
 int TSDBEngineImpl::executeDownsampleQuery(const TimeRangeDownsampleRequest& downsampleReq,
                                            std::vector<Row>& downsampleRes) {
 #ifdef ENABLE_STAT
-  if (print_agg_cnt.fetch_add(1) <= 10) {
+  int a = downsample_query_cnt.load();
+  if (a > 200000 && a <= 200010) {
     printf("TimeRangeDownsampleRequest : [%ld, %ld), interval %ld ", downsampleReq.timeLowerBound,
            downsampleReq.timeUpperBound, downsampleReq.interval);
     printf("[%s] ", downsampleReq.columnName.c_str());

@@ -38,9 +38,6 @@ extern std::atomic<int64_t> flush_wait_cnt;
 extern std::atomic<int64_t> alloc_time;
 extern std::atomic<int64_t> wait_aio;
 extern std::atomic<int64_t> print_row_cnt;
-extern std::atomic<int64_t> print_tr_cnt;
-extern std::atomic<int64_t> print_agg_cnt;
-extern std::atomic<int64_t> print_ds_cnt;
 
 #define ENABLE_STAT
 #ifdef ENABLE_STAT
