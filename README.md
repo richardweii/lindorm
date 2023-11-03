@@ -4,6 +4,8 @@
 其他参赛说明及本文档均未说明或不清楚的问题可询比赛客服。
 
 ### write latency
+total: 219277 ms
+
 ```c++
 Count: 30000000  Average: 33.8033  StdDev: 4896.48
 Min: 0.0000  Median: 4.3399  Max: 2813565.5210
@@ -101,7 +103,68 @@ Min: 0.0000  Median: 4.3399  Max: 2813565.5210
 [ 2000000, 2500000 )      39   0.000% 100.000% 
 [ 2500000, 3000000 )       4   0.000% 100.000%
 ```
-
+```
+[INFO]  2023-11-03 09:49:50.182925 stat.cpp:51: col 0 col_name column_0, col_type Integer, origin_sz 114 MB, compress_sz 24 MB compress rate is 0.213092
+[INFO]  2023-11-03 09:49:50.182942 stat.cpp:51: col 1 col_name column_1, col_type Integer, origin_sz 114 MB, compress_sz 24 MB compress rate is 0.213092
+[INFO]  2023-11-03 09:49:50.182953 stat.cpp:51: col 2 col_name column_10, col_type double, origin_sz 228 MB, compress_sz 26 MB compress rate is 0.117294
+[INFO]  2023-11-03 09:49:50.182963 stat.cpp:51: col 3 col_name column_11, col_type Integer, origin_sz 114 MB, compress_sz 24 MB compress rate is 0.213092
+[INFO]  2023-11-03 09:49:50.182976 stat.cpp:51: col 4 col_name column_12, col_type double, origin_sz 228 MB, compress_sz 26 MB compress rate is 0.117294
+[INFO]  2023-11-03 09:49:50.182989 stat.cpp:51: col 5 col_name column_13, col_type Integer, origin_sz 114 MB, compress_sz 24 MB compress rate is 0.213092
+[INFO]  2023-11-03 09:49:50.183003 stat.cpp:51: col 6 col_name column_14, col_type double, origin_sz 228 MB, compress_sz 26 MB compress rate is 0.117294
+[INFO]  2023-11-03 09:49:50.183015 stat.cpp:51: col 7 col_name column_15, col_type Integer, origin_sz 114 MB, compress_sz 24 MB compress rate is 0.213092
+[INFO]  2023-11-03 09:49:50.183027 stat.cpp:51: col 8 col_name column_16, col_type string, origin_sz 915 MB, compress_sz 31 MB compress rate is 0.033948
+[INFO]  2023-11-03 09:49:50.183040 stat.cpp:51: col 9 col_name column_17, col_type double, origin_sz 228 MB, compress_sz 26 MB compress rate is 0.117294
+[INFO]  2023-11-03 09:49:50.183052 stat.cpp:51: col 10 col_name column_18, col_type double, origin_sz 228 MB, compress_sz 26 MB compress rate is 0.117294
+[INFO]  2023-11-03 09:49:50.183064 stat.cpp:51: col 11 col_name column_19, col_type Integer, origin_sz 114 MB, compress_sz 24 MB compress rate is 0.213092
+[INFO]  2023-11-03 09:49:50.183077 stat.cpp:51: col 12 col_name column_2, col_type double, origin_sz 228 MB, compress_sz 26 MB compress rate is 0.117294
+[INFO]  2023-11-03 09:49:50.183089 stat.cpp:51: col 13 col_name column_20, col_type Integer, origin_sz 114 MB, compress_sz 24 MB compress rate is 0.213092
+[INFO]  2023-11-03 09:49:50.183102 stat.cpp:51: col 14 col_name column_21, col_type double, origin_sz 228 MB, compress_sz 26 MB compress rate is 0.117294
+[INFO]  2023-11-03 09:49:50.183115 stat.cpp:51: col 15 col_name column_22, col_type double, origin_sz 228 MB, compress_sz 26 MB compress rate is 0.117294
+[INFO]  2023-11-03 09:49:50.183127 stat.cpp:51: col 16 col_name column_23, col_type Integer, origin_sz 114 MB, compress_sz 24 MB compress rate is 0.213092
+[INFO]  2023-11-03 09:49:50.183140 stat.cpp:51: col 17 col_name column_24, col_type double, origin_sz 228 MB, compress_sz 26 MB compress rate is 0.117294
+[INFO]  2023-11-03 09:49:50.183151 stat.cpp:51: col 18 col_name column_25, col_type Integer, origin_sz 114 MB, compress_sz 24 MB compress rate is 0.213092
+[INFO]  2023-11-03 09:49:50.183163 stat.cpp:51: col 19 col_name column_26, col_type double, origin_sz 228 MB, compress_sz 26 MB compress rate is 0.117294
+[INFO]  2023-11-03 09:49:50.183175 stat.cpp:51: col 20 col_name column_27, col_type double, origin_sz 228 MB, compress_sz 26 MB compress rate is 0.117294
+[INFO]  2023-11-03 09:49:50.183188 stat.cpp:51: col 21 col_name column_28, col_type double, origin_sz 228 MB, compress_sz 26 MB compress rate is 0.117294
+[INFO]  2023-11-03 09:49:50.183200 stat.cpp:51: col 22 col_name column_29, col_type Integer, origin_sz 114 MB, compress_sz 24 MB compress rate is 0.213092
+[INFO]  2023-11-03 09:49:50.183212 stat.cpp:51: col 23 col_name column_3, col_type Integer, origin_sz 114 MB, compress_sz 24 MB compress rate is 0.213092
+[INFO]  2023-11-03 09:49:50.183224 stat.cpp:51: col 24 col_name column_30, col_type Integer, origin_sz 114 MB, compress_sz 24 MB compress rate is 0.213092
+[INFO]  2023-11-03 09:49:50.183237 stat.cpp:51: col 25 col_name column_31, col_type Integer, origin_sz 114 MB, compress_sz 24 MB compress rate is 0.213092
+[INFO]  2023-11-03 09:49:50.183249 stat.cpp:51: col 26 col_name column_32, col_type double, origin_sz 228 MB, compress_sz 26 MB compress rate is 0.117294
+[INFO]  2023-11-03 09:49:50.183261 stat.cpp:51: col 27 col_name column_33, col_type Integer, origin_sz 114 MB, compress_sz 24 MB compress rate is 0.213092
+[INFO]  2023-11-03 09:49:50.183273 stat.cpp:51: col 28 col_name column_34, col_type double, origin_sz 228 MB, compress_sz 26 MB compress rate is 0.117294
+[INFO]  2023-11-03 09:49:50.183285 stat.cpp:51: col 29 col_name column_35, col_type string, origin_sz 915 MB, compress_sz 31 MB compress rate is 0.033948
+[INFO]  2023-11-03 09:49:50.183297 stat.cpp:51: col 30 col_name column_36, col_type string, origin_sz 915 MB, compress_sz 31 MB compress rate is 0.033948
+[INFO]  2023-11-03 09:49:50.183309 stat.cpp:51: col 31 col_name column_37, col_type double, origin_sz 228 MB, compress_sz 26 MB compress rate is 0.117294
+[INFO]  2023-11-03 09:49:50.183322 stat.cpp:51: col 32 col_name column_38, col_type double, origin_sz 228 MB, compress_sz 26 MB compress rate is 0.117294
+[INFO]  2023-11-03 09:49:50.183334 stat.cpp:51: col 33 col_name column_39, col_type string, origin_sz 915 MB, compress_sz 31 MB compress rate is 0.033948
+[INFO]  2023-11-03 09:49:50.183346 stat.cpp:51: col 34 col_name column_4, col_type double, origin_sz 228 MB, compress_sz 26 MB compress rate is 0.117294
+[INFO]  2023-11-03 09:49:50.183358 stat.cpp:51: col 35 col_name column_40, col_type double, origin_sz 228 MB, compress_sz 26 MB compress rate is 0.117294
+[INFO]  2023-11-03 09:49:50.183369 stat.cpp:51: col 36 col_name column_41, col_type Integer, origin_sz 114 MB, compress_sz 24 MB compress rate is 0.213092
+[INFO]  2023-11-03 09:49:50.183381 stat.cpp:51: col 37 col_name column_42, col_type double, origin_sz 228 MB, compress_sz 26 MB compress rate is 0.117294
+[INFO]  2023-11-03 09:49:50.183394 stat.cpp:51: col 38 col_name column_43, col_type Integer, origin_sz 114 MB, compress_sz 24 MB compress rate is 0.213092
+[INFO]  2023-11-03 09:49:50.183406 stat.cpp:51: col 39 col_name column_44, col_type double, origin_sz 228 MB, compress_sz 26 MB compress rate is 0.117294
+[INFO]  2023-11-03 09:49:50.183418 stat.cpp:51: col 40 col_name column_45, col_type Integer, origin_sz 114 MB, compress_sz 24 MB compress rate is 0.213092
+[INFO]  2023-11-03 09:49:50.183431 stat.cpp:51: col 41 col_name column_46, col_type Integer, origin_sz 114 MB, compress_sz 24 MB compress rate is 0.213092
+[INFO]  2023-11-03 09:49:50.183444 stat.cpp:51: col 42 col_name column_47, col_type double, origin_sz 228 MB, compress_sz 26 MB compress rate is 0.117294
+[INFO]  2023-11-03 09:49:50.183456 stat.cpp:51: col 43 col_name column_48, col_type double, origin_sz 228 MB, compress_sz 26 MB compress rate is 0.117294
+[INFO]  2023-11-03 09:49:50.183468 stat.cpp:51: col 44 col_name column_49, col_type Integer, origin_sz 114 MB, compress_sz 24 MB compress rate is 0.213092
+[INFO]  2023-11-03 09:49:50.183480 stat.cpp:51: col 45 col_name column_5, col_type Integer, origin_sz 114 MB, compress_sz 24 MB compress rate is 0.213092
+[INFO]  2023-11-03 09:49:50.183492 stat.cpp:51: col 46 col_name column_50, col_type Integer, origin_sz 114 MB, compress_sz 24 MB compress rate is 0.213092
+[INFO]  2023-11-03 09:49:50.183505 stat.cpp:51: col 47 col_name column_51, col_type double, origin_sz 228 MB, compress_sz 26 MB compress rate is 0.117294
+[INFO]  2023-11-03 09:49:50.183517 stat.cpp:51: col 48 col_name column_52, col_type Integer, origin_sz 114 MB, compress_sz 24 MB compress rate is 0.213092
+[INFO]  2023-11-03 09:49:50.183530 stat.cpp:51: col 49 col_name column_53, col_type string, origin_sz 915 MB, compress_sz 31 MB compress rate is 0.033948
+[INFO]  2023-11-03 09:49:50.183542 stat.cpp:51: col 50 col_name column_54, col_type double, origin_sz 228 MB, compress_sz 26 MB compress rate is 0.117294
+[INFO]  2023-11-03 09:49:50.183554 stat.cpp:51: col 51 col_name column_55, col_type Integer, origin_sz 114 MB, compress_sz 24 MB compress rate is 0.213092
+[INFO]  2023-11-03 09:49:50.183566 stat.cpp:51: col 52 col_name column_56, col_type double, origin_sz 228 MB, compress_sz 26 MB compress rate is 0.117294
+[INFO]  2023-11-03 09:49:50.183578 stat.cpp:51: col 53 col_name column_57, col_type double, origin_sz 228 MB, compress_sz 26 MB compress rate is 0.117294
+[INFO]  2023-11-03 09:49:50.183591 stat.cpp:51: col 54 col_name column_58, col_type double, origin_sz 228 MB, compress_sz 26 MB compress rate is 0.117294
+[INFO]  2023-11-03 09:49:50.183603 stat.cpp:51: col 55 col_name column_59, col_type Integer, origin_sz 114 MB, compress_sz 24 MB compress rate is 0.213092
+[INFO]  2023-11-03 09:49:50.183616 stat.cpp:51: col 56 col_name column_6, col_type string, origin_sz 915 MB, compress_sz 31 MB compress rate is 0.033948
+[INFO]  2023-11-03 09:49:50.183628 stat.cpp:51: col 57 col_name column_7, col_type double, origin_sz 228 MB, compress_sz 26 MB compress rate is 0.117294
+[INFO]  2023-11-03 09:49:50.183639 stat.cpp:51: col 58 col_name column_8, col_type double, origin_sz 228 MB, compress_sz 26 MB compress rate is 0.117294
+[INFO]  2023-11-03 09:49:50.183651 stat.cpp:51: col 59 col_name column_9, col_type Integer, origin_sz 114 MB, compress_sz 24 MB compress rate is 0.213092
+```
 # 注意事项
 1. 日志必须使用 std::out 或 std::err，打印到其他地方正式测评时可能无法透传出来。
 2. 建议不要频繁打印日志，正式环境中日志的实现可能会产生同步、异步 IO 行为，影响选手成绩，正式比赛中对每次提交运行的总日志大小有限制。

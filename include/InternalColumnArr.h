@@ -51,15 +51,27 @@ public:
 
   // 元数据直接写到内存，内存里面的元数据在shutdown的时候会持久化的
   void Flush(AlignedWriteBuffer* buffer, int cnt, BlockMeta* meta) {
+    LOG_ASSERT(type_ < COLUMN_TYPE_UNINITIALIZED, "undefine type");
     uint64_t offset;
     uint64_t input_sz = cnt * sizeof(T);
-    uint64_t compress_buf_sz = max_dest_size_func(input_sz);
+    uint64_t compress_buf_sz = 0;
+    uint32_t bb = 0;
+    if(type_ == COLUMN_TYPE_INTEGER) {
+      compress_buf_sz = SIMDMaxDestSize((uint32_t*) data_, cnt, bb);
+    } else {
+      compress_buf_sz = max_dest_size_func[type_](input_sz);
+    }
 
     auto now = TIME_NOW;
     auto compress_buf = reinterpret_cast<char*>(naive_alloc(compress_buf_sz));
     auto now2 = TIME_NOW;
     RECORD_FETCH_ADD(alloc_time, TIME_DURATION_US(now, now2));
-    uint64_t compress_sz = compress_func((const char*)data_, input_sz, compress_buf, compress_buf_sz);
+    uint64_t compress_sz = 0;
+    if(type_ == COLUMN_TYPE_INTEGER) {
+      compress_sz = SIMDCompress((uint32_t*) data_, cnt, bb, compress_buf);
+    } else {
+      compress_sz = compress_func[type_]((const char*)data_, input_sz, compress_buf, compress_buf_sz);
+    }
 
     buffer->write(compress_buf, compress_sz, offset);
     naive_free(compress_buf);
@@ -73,6 +85,7 @@ public:
 
   void Read(File* file, AlignedWriteBuffer* buffer, BlockMeta* meta) {
     LOG_ASSERT(meta != nullptr, "error");
+    LOG_ASSERT(type_ < COLUMN_TYPE_UNINITIALIZED, "undefine type");
 
     // buf 和offset 的按512字节对齐
     uint64_t offset = meta->offset[col_id_];
@@ -109,8 +122,7 @@ public:
         buffer->read(compressed_data + st.st_size - offset, compress_sz - (st.st_size - offset), st.st_size);
       }
     }
-
-    auto ret = decompress_func(compressed_data, (char*)data_, compress_sz, meta->origin_sz[col_id_]);
+    auto ret = decompress_func[type_](compressed_data, (char*)data_, compress_sz, meta->origin_sz[col_id_]);
     LOG_ASSERT(ret == (int)meta->origin_sz[col_id_], "uncompress error");
     naive_free(buf);
   }
@@ -136,13 +148,14 @@ public:
   }
 
   void Decompressed(char* data_buf, BlockMeta* meta) {
+    LOG_ASSERT(type_ < COLUMN_TYPE_UNINITIALIZED, "undefine type");
     char* compressed_data = data_buf;
     uint64_t offset = meta->offset[col_id_];
     uint64_t file_read_off = rounddown512(meta->offset[col_id_]); // offset对齐
     size_t compress_sz = meta->compress_sz[col_id_];
 
     compressed_data += (offset - file_read_off); // 偏移修正
-    auto ret = decompress_func(compressed_data, (char*)data_, compress_sz, meta->origin_sz[col_id_]);
+    auto ret = decompress_func[type_](compressed_data, (char*)data_, compress_sz, meta->origin_sz[col_id_]);
     LOG_ASSERT(ret == (int)meta->origin_sz[col_id_], "uncompress error");
     naive_free(data_buf);
   }
@@ -188,6 +201,7 @@ public:
   const int col_id_;
 
   T data_[kMemtableRowNum];
+  T simd_[kMemtableRowNum];
   // T max;
   ColumnType type_;
 };
@@ -224,13 +238,13 @@ public:
     RECORD_FETCH_ADD(alloc_time, TIME_DURATION_US(now, now2));
     memcpy(origin, lens_, writesz1);
     memcpy(origin + writesz1, data_.c_str(), writesz2);
-    uint64_t compress_buf_sz = max_dest_size_func(input_sz);
+    uint64_t compress_buf_sz = max_dest_size_func[0](input_sz);
     auto now11 = TIME_NOW;
     char* compress_buf = reinterpret_cast<char*>(naive_alloc(compress_buf_sz));
     auto now111 = TIME_NOW;
     RECORD_FETCH_ADD(alloc_time, TIME_DURATION_US(now11, now111));
 
-    uint64_t compress_sz = compress_func((const char*)origin, input_sz, compress_buf, compress_buf_sz);
+    uint64_t compress_sz = compress_func[0]((const char*)origin, input_sz, compress_buf, compress_buf_sz);
 
     uint64_t off;
     buffer->write(compress_buf, compress_sz, off);
@@ -287,7 +301,7 @@ public:
       }
     }
 
-    auto ret = decompress_func(compress_data, origin_buf, compress_sz, origin_buf_sz);
+    auto ret = decompress_func[0](compress_data, origin_buf, compress_sz, origin_buf_sz);
     LOG_ASSERT(ret == (int)origin_buf_sz, "uncompress error");
 
     memcpy(lens_, origin_buf, sizeof(lens_[0]) * (meta->num));
@@ -337,7 +351,7 @@ public:
     char* compress_data = data_buf;
 
     compress_data += (offset - file_read_off); // 偏移修正
-    auto ret = decompress_func(compress_data, origin_buf, compress_sz, origin_buf_sz);
+    auto ret = decompress_func[0](compress_data, origin_buf, compress_sz, origin_buf_sz);
     LOG_ASSERT(ret == (int)origin_buf_sz, "uncompress error");
 
     memcpy(lens_, origin_buf, sizeof(lens_[0]) * (meta->num));

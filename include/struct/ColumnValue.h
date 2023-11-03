@@ -37,10 +37,10 @@ namespace LindormContest {
     *   3. double float: 8 bytes, supporting negative value
     */
     enum ColumnType {
-        COLUMN_TYPE_STRING = 1,
-        COLUMN_TYPE_INTEGER = 2,
-        COLUMN_TYPE_DOUBLE_FLOAT = 3,
-        COLUMN_TYPE_UNINITIALIZED = 4
+        COLUMN_TYPE_STRING = 0,
+        COLUMN_TYPE_INTEGER = 1,
+        COLUMN_TYPE_DOUBLE_FLOAT = 2,
+        COLUMN_TYPE_UNINITIALIZED = 3
     };
 
     std::string getNameFromColumnType(ColumnType columnType);

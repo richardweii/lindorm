@@ -133,9 +133,9 @@ void play_zstd() {
   }
 
   int origin_sz = sizeof(int) * CNT;
-  int compress_buf_sz = LindormContest::max_dest_size_func(origin_sz);
+  int compress_buf_sz = LindormContest::max_dest_size_func[0](origin_sz);
   char* compress_buf = new char[compress_buf_sz];
-  int compress_sz = LindormContest::compress_func((char*)nums, origin_sz, compress_buf, compress_buf_sz);
+  int compress_sz = LindormContest::compress_func[0]((char*)nums, origin_sz, compress_buf, compress_buf_sz);
 
   LOG_INFO("zstd origin_sz %d compress_sz %d, compress_ratio = %f", origin_sz, compress_sz,
            (compress_sz * 1.0) / (origin_sz * 1.0));

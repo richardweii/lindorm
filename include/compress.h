@@ -4,12 +4,14 @@
 
 #include "util/lz4.h"
 #include "util/zstd.h"
-
+#include "simdcomp/simdcomp.h"
+#include <functional>
+#include <cstdio>
 namespace LindormContest {
 
-typedef int MaxDestSizeFunc(int);
-typedef uint64_t CompressFunc(const char* raw_data, uint64_t raw_data_len, char* dest, uint64_t dest_len);
-typedef int DeCompressFunc(const char* compressed, char* dest, int compressed_sz, int dest_cap);
+typedef std::function<int(int)> MaxDestSizeFunc;
+typedef std::function<uint64_t(const char* raw_data, uint64_t raw_data_len, char* dest, uint64_t dest_len)> CompressFunc;
+typedef std::function<int(const char* compressed, char* dest, int compressed_sz, int dest_cap)> DeCompressFunc;
 /**
  * 各种压缩算法的实现
  */
@@ -33,8 +35,26 @@ inline int ZSTDDeCompress(const char* src, char* dst, int compressedSize, int ds
   return ZSTD_decompress(dst, dstCapacity, src, compressedSize);
 }
 
-extern MaxDestSizeFunc* max_dest_size_func;
-extern CompressFunc* compress_func;
-extern DeCompressFunc* decompress_func;
+inline int SIMDMaxDestSize(uint32_t *src, int Nofints, uint32_t &b) {
+  b = maxbits_length(src, Nofints);
+  return simdpack_compressedbytes(Nofints, b);
+} 
+
+inline int SIMDCompress(uint32_t *src, int Nofints, uint32_t b, char *out) {
+  //return copresssed length
+  __m128i *eof_ = simdpack_length(src, Nofints, (__m128i *)out, b);
+  return (eof_-(__m128i *)out)*sizeof(__m128i);
+}
+
+inline void SIMDDeCompress(char *src, int Nofints, uint32_t *out, uint32_t b) {
+  simdunpack_length((const __m128i *)src, Nofints, out, b);
+}
+
+
+
+// string, int, float
+const std::vector<MaxDestSizeFunc> max_dest_size_func = {ZSTDMaxDestSize,ZSTDMaxDestSize,ZSTDMaxDestSize,nullptr};
+const std::vector<CompressFunc> compress_func = {ZSTDCompress, ZSTDCompress, ZSTDCompress, nullptr};
+const std::vector<DeCompressFunc> decompress_func = {ZSTDDeCompress, ZSTDDeCompress, ZSTDDeCompress, nullptr};
 
 } // namespace LindormContest
