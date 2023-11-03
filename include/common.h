@@ -27,7 +27,7 @@ constexpr int kMemtableRowNum = 8 * KB;                    // 一个memtable里�
 constexpr int kExtraColNum = 3;
 constexpr int kWriteBufferSize = 1024 * KB;
 constexpr size_t kReadCacheSize = 40 * MB;
-constexpr int kWorkerThread = 8;
+constexpr int kWorkerThread = 16;
 constexpr int kCoroutinePerThread = 32;
 // constexpr size_t kMemoryPoolSz = 1 * 1024 * MB; // 1GB临时内存
 #else

@@ -37,6 +37,8 @@ std::atomic<int64_t> alloc_time{0};
 std::atomic<int64_t> wait_aio{0};
 std::atomic<int64_t> print_row_cnt{0};
 
+std::atomic<int64_t> write_phase_sync{0};
+
 std::string types[] = {
   "NULL",
   "string",

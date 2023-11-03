@@ -2,6 +2,7 @@
 
 #include <atomic>
 
+#include "TSDBEngineImpl.h"
 #include "coroutine/coroutine.h"
 #include "util/likely.h"
 #include "util/logging.h"
@@ -26,20 +27,28 @@ Scheduler::~Scheduler() { delete[] wakeup_buf_; }
 
 void Scheduler::scheduling() {
   // 绑核
-  cpu_set_t cpuset;
-  CPU_ZERO(&cpuset);
-  CPU_SET(tid_, &cpuset);
-  pthread_setaffinity_np(pthread_self(), sizeof(cpu_set_t), &cpuset);
+  // cpu_set_t cpuset;
+  // CPU_ZERO(&cpuset);
+  // CPU_SET(tid_, &cpuset);
+  // pthread_setaffinity_np(pthread_self(), sizeof(cpu_set_t), &cpuset);
 
   scheduler = this;
   int idle_time = 0;
+  int sleep_time = 10;
   // auto start = TIME_NOW;
   while (!(stop && runnable_list_.empty() && waiting_list_.empty())) {
-    auto cur = TIME_NOW;
-    // if (UNLIKELY(TIME_DURATION_US(start, cur) > 10000 * 1000)) {
+    if (LindormContest::write_phase) {
+      sleep_time--;
+      if (sleep_time == 0) {
+        std::this_thread::sleep_for(std::chrono::microseconds(100));
+        sleep_time = 32;
+      }
+    }
+    // auto cur = TIME_NOW;
+    // if (UNLIKELY(TIME_DURATION_US(start, cur) > 5000 * 1000)) {
     //   start = cur;
-    //   LOG_DEBUG("[tid : %d ] runnable: %ld, waiting: %ld, idle: %ld", tid_, runnable_list_.size(), waiting_list_.size(),
-    //             idle_list_.size());
+    //   LOG_DEBUG("[tid : %d ] runnable: %ld, waiting: %ld, idle: %ld. task_num %d", tid_, runnable_list_.size(),
+    //             waiting_list_.size(), idle_list_.size(), task_num_.load());
     // }
     if (UNLIKELY(runnable_list_.empty())) {
       // do none-block polling work
@@ -53,7 +62,7 @@ void Scheduler::scheduling() {
     }
     if (UNLIKELY(runnable_list_.empty())) {
       std::this_thread::yield();
-      if (idle_time++ >= 5) {
+      if (LindormContest::write_phase && idle_time++ >= 5) {
         std::this_thread::sleep_for(std::chrono::milliseconds(1));
       }
       continue;
@@ -89,6 +98,7 @@ void Scheduler::dispatch() {
       task_pos_++;
       idle_list_.erase(iter++);
       runnable_list_.push_back(coro);
+      task_num_--;
     } else if (!try_deque) {
       try_deque = true;
       task_cnt_ = queue_.try_dequeue_bulk(task_buf_, kTaskBufLen);

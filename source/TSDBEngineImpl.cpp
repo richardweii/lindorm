@@ -32,6 +32,8 @@
 std::once_flag start_coro;
 
 namespace LindormContest {
+bool write_phase = false;
+
 /**
  * This constructor's function signature should not be modified.
  * Our evaluation program will call this constructor.
@@ -46,10 +48,11 @@ void TSDBEngineImpl::loadSchema() {
   schemaFin.open(getDataPath() + "/schema", std::ios::in);
   if (!schemaFin.is_open() || !schemaFin.good()) {
     std::cout << "Connect new database with empty pre-written data" << std::endl;
-    new_db = true;
+    write_phase = true;
     schemaFin.close();
     return;
   }
+  write_phase = false;
   int magic = 0;
   schemaFin >> magic;
   if (magic != kColumnNum) {
@@ -90,12 +93,12 @@ int TSDBEngineImpl::connect() {
   // 初始化shard
   File* shard_file = nullptr;
   for (int i = 0; i < kShardNum; i++) {
-    if (new_db) {
+    if (write_phase) {
       shard_file = io_mgr_->OpenAsyncWriteFile(ShardDataFileName(dataDirPath, kTableName, i), shard2tid(i));
     } else {
       shard_file = io_mgr_->OpenAsyncReadFile(ShardDataFileName(dataDirPath, kTableName, i), shard2tid(i));
     }
-    shards_[i]->Init(new_db, shard_file);
+    shards_[i]->Init(write_phase, shard_file);
   }
 
   // load vin2vid
@@ -214,7 +217,7 @@ int TSDBEngineImpl::shutdown() {
   }
   wg.Wait();
 
-  if (new_db) {
+  if (write_phase) {
     print_file_summary(columns_type_, columns_name_);
   }
   print_performance_statistic();
@@ -299,6 +302,12 @@ int TSDBEngineImpl::write(const WriteRequest& writeRequest) {
     LOG_ASSERT(vid != UINT16_MAX, "error");
   }
 
+  if (UNLIKELY(write_phase)) {
+    while (sync_) {
+      std::this_thread::sleep_for(std::chrono::milliseconds(1));
+    }
+  }
+
   for (int tid = 0; tid < kWorkerThread; tid++) {
     if (rows[tid].empty()) {
       continue;
@@ -363,16 +372,6 @@ int TSDBEngineImpl::executeLatestQuery(const LatestQueryRequest& pReadReq, std::
 }
 
 int TSDBEngineImpl::executeTimeRangeQuery(const TimeRangeQueryRequest& trReadReq, std::vector<Row>& trReadRes) {
-#ifdef ENABLE_STAT
-  int a = time_range_query_cnt.load();
-  if (a > 100000 && a <= 100010) {
-    printf("TimeRangeQueryRequest : [%ld, %ld) ", trReadReq.timeLowerBound, trReadReq.timeUpperBound);
-    for (auto& col : trReadReq.requestedColumns) {
-      printf("[%s] ", col.c_str());
-    }
-    printf("\n");
-  }
-#endif
   RECORD_FETCH_ADD(time_range_query_cnt, 1);
   std::vector<int> colids;
   fillColids(trReadReq.requestedColumns, colids);
@@ -380,6 +379,24 @@ int TSDBEngineImpl::executeTimeRangeQuery(const TimeRangeQueryRequest& trReadReq
   uint16_t vid = getVidForRead(trReadReq.vin);
   if (UNLIKELY(vid == UINT16_MAX)) {
     return 0;
+  }
+#ifdef ENABLE_STAT
+  int a = time_range_query_cnt.load();
+  if (a > 100000 && a <= 100050) {
+    printf("TimeRangeQueryRequest :VID %d  [%ld, %ld) ", vid, trReadReq.timeLowerBound, trReadReq.timeUpperBound);
+    for (auto& col : trReadReq.requestedColumns) {
+      printf("[%s] ", col.c_str());
+    }
+    printf("\n");
+  }
+#endif
+
+  if (UNLIKELY(write_phase)) {
+    sync_ = true;
+    while (inflight_write_.Cnt() != 0) {
+      std::this_thread::yield();
+    }
+    write_phase_sync.fetch_add(1);
   }
 
   int shard = sharding(vid);
@@ -391,19 +408,17 @@ int TSDBEngineImpl::executeTimeRangeQuery(const TimeRangeQueryRequest& trReadReq
     },
     shard2tid(shard));
   wg.Wait();
+
+  if (UNLIKELY(write_phase)) {
+    if (write_phase_sync.fetch_sub(1) == 1) {
+      sync_ = false;
+    }
+  }
   return 0;
 }
 
 int TSDBEngineImpl::executeAggregateQuery(const TimeRangeAggregationRequest& aggregationReq,
                                           std::vector<Row>& aggregationRes) {
-#ifdef ENABLE_STAT
-  int a = agg_query_cnt.load();
-  if (a > 10000 && a <= 10010) {
-    printf("TimeRangeAggregationRequest : [%ld, %ld) ", aggregationReq.timeLowerBound, aggregationReq.timeUpperBound);
-    printf("[%s] ", aggregationReq.columnName.c_str());
-    printf("\n");
-  }
-#endif
   RECORD_FETCH_ADD(agg_query_cnt, 1);
 
   uint16_t vid = getVidForRead(aggregationReq.vin);
@@ -411,6 +426,15 @@ int TSDBEngineImpl::executeAggregateQuery(const TimeRangeAggregationRequest& agg
     return 0;
   }
 
+#ifdef ENABLE_STAT
+  int a = agg_query_cnt.load();
+  if (a > 10000 && a <= 10010) {
+    printf("TimeRangeAggregationRequest :VID %d [%ld, %ld) ", vid, aggregationReq.timeLowerBound,
+           aggregationReq.timeUpperBound);
+    printf("[%s] ", aggregationReq.columnName.c_str());
+    printf("\n");
+  }
+#endif
   int colid = column_idx_.at(aggregationReq.columnName);
 
   int shard = sharding(vid);
@@ -435,21 +459,22 @@ int TSDBEngineImpl::executeAggregateQuery(const TimeRangeAggregationRequest& agg
 
 int TSDBEngineImpl::executeDownsampleQuery(const TimeRangeDownsampleRequest& downsampleReq,
                                            std::vector<Row>& downsampleRes) {
-#ifdef ENABLE_STAT
-  int a = downsample_query_cnt.load();
-  if (a > 200000 && a <= 200010) {
-    printf("TimeRangeDownsampleRequest : [%ld, %ld), interval %ld ", downsampleReq.timeLowerBound,
-           downsampleReq.timeUpperBound, downsampleReq.interval);
-    printf("[%s] ", downsampleReq.columnName.c_str());
-    printf("\n");
-  }
-#endif
   RECORD_FETCH_ADD(downsample_query_cnt, 1);
 
   uint16_t vid = getVidForRead(downsampleReq.vin);
   if (vid == UINT16_MAX) {
     return 0;
   }
+
+#ifdef ENABLE_STAT
+  int a = downsample_query_cnt.load();
+  if (a > 200000 && a <= 200010) {
+    printf("TimeRangeDownsampleRequest :VID %d [%ld, %ld), interval %ld ", vid, downsampleReq.timeLowerBound,
+           downsampleReq.timeUpperBound, downsampleReq.interval);
+    printf("[%s] ", downsampleReq.columnName.c_str());
+    printf("\n");
+  }
+#endif
 
   int colid = column_idx_.at(downsampleReq.columnName);
 

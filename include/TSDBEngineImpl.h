@@ -20,6 +20,7 @@
 #include "util/waitgroup.h"
 
 namespace LindormContest {
+extern bool write_phase;
 class ShardImpl;
 class TSDBEngineImpl : public TSDBEngine {
 public:
@@ -81,7 +82,6 @@ private:
 
   IOManager* io_mgr_{nullptr};
   ShardImpl* shards_[kShardNum];
-  bool new_db = false;
 
   CoroutinePool* coro_pool_{nullptr};
   void* mem_pool_addr_{nullptr};
@@ -90,6 +90,8 @@ private:
 
   std::thread* stat_thread_{nullptr};
   volatile bool stop_{false};
+
+  volatile bool sync_{false};
 }; // End class TSDBEngineImpl.
 
 } // namespace LindormContest

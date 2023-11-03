@@ -29,7 +29,10 @@ public:
   void registerPollingFunc(AdvanceFunc func) { polling_ = std::move(func); }
   void scheduling();
   void exit() { stop = true; }
-  void addTask(CoroutineTask&& task) { queue_.enqueue(std::move(task)); }
+  void addTask(CoroutineTask&& task) {
+    queue_.enqueue(std::move(task));
+    task_num_++;
+  }
   void addWakupCoroutine(Coroutine* coro) { wakeup_list_.enqueue(coro); };
 
   friend Coroutine* this_coroutine::current();
@@ -44,6 +47,8 @@ private:
   volatile bool stop = false;
   int coro_num_;
   int tid_;
+
+  std::atomic_int32_t task_num_{0};
 
   TaskQueue queue_;
   CoroutineTask task_buf_[kTaskBufLen];

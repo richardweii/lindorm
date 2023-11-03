@@ -39,6 +39,8 @@ extern std::atomic<int64_t> alloc_time;
 extern std::atomic<int64_t> wait_aio;
 extern std::atomic<int64_t> print_row_cnt;
 
+extern std::atomic<int64_t> write_phase_sync;
+
 #define ENABLE_STAT
 #ifdef ENABLE_STAT
 #define RECORD_FETCH_ADD(num, delta) (num.fetch_add(delta))
