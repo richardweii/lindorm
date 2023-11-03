@@ -37,10 +37,12 @@ void Scheduler::scheduling() {
       // do none-block polling work
       if (LIKELY(polling_ != nullptr)) {
         polling_();
+        wakeup();
       }
     }
-    wakeup();
-    dispatch();
+    if (!idle_list_.empty()) {
+      dispatch();
+    }
     if (UNLIKELY(runnable_list_.empty())) {
       std::this_thread::yield();
       continue;

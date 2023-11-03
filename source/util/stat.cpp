@@ -72,6 +72,7 @@ void print_performance_statistic() {
     cache_hit.load(), cache_cnt.load() - cache_hit.load(), cache_hit.load() * 1.0 / cache_cnt.load(),
     data_wait_cnt.load(), lru_wait_cnt.load(), alloc_time.load(), wait_aio.load(), disk_blk_access_cnt.load());
   LOG_INFO("*******************************************");
+  fflush(stdout);
 }
 
 void print_row(const Row& row, uint16_t vid) {

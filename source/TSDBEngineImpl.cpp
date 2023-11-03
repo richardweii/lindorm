@@ -288,7 +288,7 @@ int TSDBEngineImpl::write(const WriteRequest& writeRequest) {
   for (auto& row : writeRequest.rows) {
     uint16_t vid = getVidForWrite(row.vin);
 #ifdef ENABLE_STAT
-    if (print_row_cnt.fetch_add(1) <= 15) {
+    if (print_row_cnt.fetch_add(1) <= 100) {
       print_row(row, vid);
     }
 #endif
@@ -424,8 +424,8 @@ int TSDBEngineImpl::executeAggregateQuery(const TimeRangeAggregationRequest& agg
     shard2tid(shard));
   wg.Wait();
 #ifdef ENABLE_STAT
-  auto tq = agg_query_cnt.load();
-  if (tq == 30000) {
+  auto tq = agg_query_cnt.fetch_add(1);
+  if (tq == 20000) {
     print_performance_statistic();
   }
 #endif
@@ -465,8 +465,8 @@ int TSDBEngineImpl::executeDownsampleQuery(const TimeRangeDownsampleRequest& dow
     shard2tid(shard));
   wg.Wait();
 #ifdef ENABLE_STAT
-  auto tq = downsample_query_cnt.load();
-  if (tq == 1000000) {
+  auto tq = downsample_query_cnt.fetch_add(1);
+  if (tq == 500000) {
     print_performance_statistic();
   }
 #endif

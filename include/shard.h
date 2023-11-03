@@ -223,6 +223,9 @@ inline void ShardImpl::aggregateImpl2(uint64_t vid, int64_t lowerInclusive, int6
   File* rfile = data_file_;
   if (!blk_metas.empty()) {
     RECORD_FETCH_ADD(disk_blk_access_cnt, blk_metas.size());
+    ColumnValue col;
+    std::vector<uint16_t> idxs;
+    std::vector<int64_t> tss;
     std::vector<ColumnArrWrapper*> need_read_from_file;
     std::vector<char*> tmp_bufs;
     for (auto blk_meta : blk_metas) {
@@ -280,17 +283,15 @@ inline void ShardImpl::aggregateImpl2(uint64_t vid, int64_t lowerInclusive, int6
         col->Decompressed(tmp_bufs[i], blk_meta);
         i++;
       }
-
+      idxs.clear();
+      tss.clear();
       // 现在vid + ts是有序的，可以直接应用二分查找
-      std::vector<uint16_t> idxs;
-      std::vector<int64_t> tss;
       findMatchingIndices(tmp_vid_col->GetDataArr(), tmp_ts_col->GetDataArr(), tmp_idx_col->GetDataArr(), blk_meta->num,
                           vid2svid(vid), lowerInclusive, upperExclusive, idxs, tss);
 
       if (!idxs.empty()) {
         for (int i = 0; i < (int)idxs.size(); i++) {
           // fill aggragate container.
-          ColumnValue col;
           agg_col->Get(idxs[i], col);
           ColumnValueWrapper wrapper(&col);
           agg.Add(wrapper.getFixedSizeValue<TCol>());

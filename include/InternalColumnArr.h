@@ -517,6 +517,8 @@ public:
 
   void Add(const ColumnValue& col, int idx) override { arr->Add(col, idx); }
 
+  void Add(uint16_t svid, int idx) { arr->data_[idx] = svid; }
+
   void Flush(AlignedWriteBuffer* buffer, int cnt, BlockMeta* meta) override { arr->Flush(buffer, cnt, meta); }
 
   void Read(File* file, AlignedWriteBuffer* buffer, BlockMeta* meta) override { arr->Read(file, buffer, meta); }
@@ -549,6 +551,8 @@ public:
 
   void Add(const ColumnValue& col, int idx) override { arr->Add(col, idx); }
 
+  void Add(uint64_t ts, int idx) { arr->data_[idx] = ts; }
+
   void Flush(AlignedWriteBuffer* buffer, int cnt, BlockMeta* meta) override { arr->Flush(buffer, cnt, meta); }
 
   void Read(File* file, AlignedWriteBuffer* buffer, BlockMeta* meta) override { arr->Read(file, buffer, meta); }
@@ -580,6 +584,8 @@ public:
   ~IdxArrWrapper() { delete arr; }
 
   void Add(const ColumnValue& col, int idx) override { arr->Add(col, idx); }
+
+  void Add(int idx_val, int idx) { arr->data_[idx] = idx_val; }
 
   void Flush(AlignedWriteBuffer* buffer, int cnt, BlockMeta* meta) override { arr->Flush(buffer, cnt, meta); }
 

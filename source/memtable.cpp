@@ -104,16 +104,13 @@ bool MemTable::Write(uint16_t svid, const Row& row) {
 
   // TODO: 不用ColumnValue
   // 写入vid列
-  ColumnValue vidVal(svid);
-  svid_col_->Add(vidVal, cnt_);
+  svid_col_->Add(svid, cnt_);
 
   // 写入ts列
-  ColumnValue tsVal(row.timestamp * 1.0);
-  ts_col_->Add(tsVal, cnt_);
+  ts_col_->Add(row.timestamp, cnt_);
 
   // 写入idx列
-  ColumnValue cntVal(cnt_);
-  idx_col_->Add(cntVal, cnt_);
+  idx_col_->Add(cnt_, cnt_);
 
   updateTs(row.timestamp, svid);
   cnt_++;
