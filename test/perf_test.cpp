@@ -58,7 +58,7 @@ static int createTable(LindormContest::TSDBEngine* engine) {
 }
 
 static constexpr int kVinNum = LindormContest::kVinNum;
-static constexpr int kRowsPerVin = 10 * 60;
+static constexpr int kRowsPerVin = 100 * 60;
 
 static bool RowEquals(const LindormContest::Row& a, const LindormContest::Row& b) {
   if (a != b) return false;
@@ -168,8 +168,8 @@ void parallel_upsert(LindormContest::TSDBEngine* engine) {
     js[j] = j;
   }
 
-  // std::mt19937 rng(1);
-  // std::shuffle(is.begin(), is.end(), rng);
+  std::mt19937 rng(1);
+  std::shuffle(is.begin(), is.end(), rng);
   // std::shuffle(js.begin(), js.end(), rng);
 
   for (int t = 0; t < thread_num; t++) {
@@ -180,7 +180,7 @@ void parallel_upsert(LindormContest::TSDBEngine* engine) {
           for (int i = th * per_thread_vin_num; i < (th + 1) * per_thread_vin_num && i < kVinNum;) {
             LindormContest::WriteRequest wReq;
             wReq.tableName = "t1";
-            for (int k = 0; i < (th + 1) * per_thread_vin_num && k < 10; k++, i++) {
+            for (int k = 0; i < (th + 1) * per_thread_vin_num && k < 20; k++, i++) {
               wReq.rows.push_back(get_row(is[i], js[j]));
             }
             int ret = engine->write(wReq);
@@ -193,6 +193,7 @@ void parallel_upsert(LindormContest::TSDBEngine* engine) {
   for (auto& th : threads) {
     th.join();
   }
+  LOG_INFO("finish push");
 
   dynamic_cast<LindormContest::TSDBEngineImpl*>(engine)->wait_write();
 

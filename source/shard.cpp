@@ -268,109 +268,115 @@ void ShardImpl::GetRowsFromTimeRange(uint64_t vid, int64_t lowerInclusive, int64
 
   if (!blk_metas.empty()) {
     RECORD_FETCH_ADD(disk_blk_access_cnt, blk_metas.size());
-    std::vector<ColumnArrWrapper*> need_read_from_file;
-    std::vector<char*> tmp_bufs;
     for (auto blk_meta : blk_metas) {
-      // 去读对应列的block
-      need_read_from_file.clear();
-      tmp_bufs.clear();
+      auto func = [blk_meta, this, &colids, rfile, &results, vid, lowerInclusive, upperExclusive,
+                   father = this_coroutine::current()]() {
+        // 去读对应列的block
+        std::vector<ColumnArrWrapper*> need_read_from_file;
+        std::vector<char*> tmp_bufs;
+        need_read_from_file.clear();
+        tmp_bufs.clear();
 
-      bool hit;
-      VidArrWrapper* tmp_vid_col = read_cache_->FetchDataArr<VidArrWrapper>(blk_meta, kColumnNum, hit);
-      if (!hit) need_read_from_file.push_back(tmp_vid_col);
+        bool hit;
+        VidArrWrapper* tmp_vid_col = read_cache_->FetchDataArr<VidArrWrapper>(blk_meta, kColumnNum, hit);
+        if (!hit) need_read_from_file.push_back(tmp_vid_col);
 
-      TsArrWrapper* tmp_ts_col = read_cache_->FetchDataArr<TsArrWrapper>(blk_meta, kColumnNum + 1, hit);
-      if (!hit) need_read_from_file.push_back(tmp_ts_col);
+        TsArrWrapper* tmp_ts_col = read_cache_->FetchDataArr<TsArrWrapper>(blk_meta, kColumnNum + 1, hit);
+        if (!hit) need_read_from_file.push_back(tmp_ts_col);
 
-      IdxArrWrapper* tmp_idx_col = read_cache_->FetchDataArr<IdxArrWrapper>(blk_meta, kColumnNum + 2, hit);
-      if (!hit) need_read_from_file.push_back(tmp_idx_col);
+        IdxArrWrapper* tmp_idx_col = read_cache_->FetchDataArr<IdxArrWrapper>(blk_meta, kColumnNum + 2, hit);
+        if (!hit) need_read_from_file.push_back(tmp_idx_col);
 
-      ColumnArrWrapper* cols[colids.size()];
+        ColumnArrWrapper* cols[colids.size()];
 
-      int icol_idx = 0;
-      for (const auto col_id : colids) {
-        switch (engine_->columns_type_[col_id]) {
-          case COLUMN_TYPE_STRING:
-            cols[icol_idx] = read_cache_->FetchDataArr<StringArrWrapper>(blk_meta, col_id, hit);
-            if (!hit) need_read_from_file.push_back(cols[icol_idx]);
-            break;
-          case COLUMN_TYPE_INTEGER:
-            cols[icol_idx] = read_cache_->FetchDataArr<IntArrWrapper>(blk_meta, col_id, hit);
-            if (!hit) need_read_from_file.push_back(cols[icol_idx]);
-            break;
-          case COLUMN_TYPE_DOUBLE_FLOAT:
-            cols[icol_idx] = read_cache_->FetchDataArr<DoubleArrWrapper>(blk_meta, col_id, hit);
-            if (!hit) need_read_from_file.push_back(cols[icol_idx]);
-            break;
-          case COLUMN_TYPE_UNINITIALIZED:
-            LOG_ASSERT(false, "error");
-            break;
-        }
-        icol_idx++;
-      }
-
-      if (UNLIKELY(write_phase_)) {
-        for (auto& col : need_read_from_file) {
-          // 异步非Batch IO
-          col->Read(rfile, write_buf_, blk_meta);
-        }
-      } else {
-        AsyncFile* async_rf = dynamic_cast<AsyncFile*>(rfile);
-        LOG_ASSERT(async_rf != nullptr, "invalid cast");
-
-        // 同时下发多个异步读IO
-        while (async_rf->avalibaleIOC() < need_read_from_file.size()) {
-          RECORD_FETCH_ADD(wait_aio, 1);
-          async_rf->waitIOC();
-        }
-        for (auto& col : need_read_from_file) {
-          // 储存用于异步IO的buf
-          tmp_bufs.push_back(col->AsyncReadCompressed(async_rf, blk_meta));
-        }
-
-        this_coroutine::co_wait(need_read_from_file.size());
-
-        int i = 0;
-        for (auto& col : need_read_from_file) {
-          col->Decompressed(tmp_bufs[i], blk_meta);
-          i++;
-        }
-      }
-      // 现在vid + ts是有序的，可以直接应用二分查找
-      std::vector<uint16_t> idxs;
-      std::vector<int64_t> tss;
-      findMatchingIndices(tmp_vid_col->GetDataArr(), tmp_ts_col->GetDataArr(), tmp_idx_col->GetDataArr(), blk_meta->num,
-                          vid2svid(vid), lowerInclusive, upperExclusive, idxs, tss);
-
-      if (!idxs.empty()) {
-        for (int i = 0; i < (int)idxs.size(); i++) {
-          // build res row
-          Row resultRow;
-          resultRow.timestamp = tss[i];
-          memcpy(resultRow.vin.vin, engine_->vid2vin_[vid].c_str(), VIN_LENGTH);
-          for (size_t k = 0; k < colids.size(); k++) {
-            ColumnValue col;
-            cols[k]->Get(idxs[i], col);
-            resultRow.columns.insert(std::make_pair(engine_->columns_name_[cols[k]->GetColid()], std::move(col)));
+        int icol_idx = 0;
+        for (const auto col_id : colids) {
+          switch (engine_->columns_type_[col_id]) {
+            case COLUMN_TYPE_STRING:
+              cols[icol_idx] = read_cache_->FetchDataArr<StringArrWrapper>(blk_meta, col_id, hit);
+              if (!hit) need_read_from_file.push_back(cols[icol_idx]);
+              break;
+            case COLUMN_TYPE_INTEGER:
+              cols[icol_idx] = read_cache_->FetchDataArr<IntArrWrapper>(blk_meta, col_id, hit);
+              if (!hit) need_read_from_file.push_back(cols[icol_idx]);
+              break;
+            case COLUMN_TYPE_DOUBLE_FLOAT:
+              cols[icol_idx] = read_cache_->FetchDataArr<DoubleArrWrapper>(blk_meta, col_id, hit);
+              if (!hit) need_read_from_file.push_back(cols[icol_idx]);
+              break;
+            case COLUMN_TYPE_UNINITIALIZED:
+              LOG_ASSERT(false, "error");
+              break;
           }
-          results.push_back(std::move(resultRow));
+          icol_idx++;
         }
-      }
 
-      read_cache_->Release(blk_meta, kColumnNum, tmp_vid_col);
-      read_cache_->Release(blk_meta, kColumnNum + 1, tmp_ts_col);
-      read_cache_->Release(blk_meta, kColumnNum + 2, tmp_idx_col);
-      for (size_t i = 0; i < colids.size(); i++) {
-        read_cache_->Release(blk_meta, colids[i], cols[i]);
-      }
+        if (UNLIKELY(write_phase_)) {
+          for (auto& col : need_read_from_file) {
+            // 异步非Batch IO
+            col->Read(rfile, write_buf_, blk_meta);
+          }
+        } else {
+          AsyncFile* async_rf = dynamic_cast<AsyncFile*>(rfile);
+          LOG_ASSERT(async_rf != nullptr, "invalid cast");
 
-      for (auto& col : need_read_from_file) {
-        auto string_col = dynamic_cast<StringArrWrapper*>(col);
-        if (UNLIKELY(string_col != nullptr)) {
-          read_cache_->ReviseCacheSize(string_col);
+          // 同时下发多个异步读IO
+          while (async_rf->avalibaleIOC() < need_read_from_file.size()) {
+            RECORD_FETCH_ADD(wait_aio, 1);
+            async_rf->waitIOC();
+          }
+          for (auto& col : need_read_from_file) {
+            // 储存用于异步IO的buf
+            tmp_bufs.push_back(col->AsyncReadCompressed(async_rf, blk_meta));
+          }
+
+          async_rf->burst();
+
+          int i = 0;
+          for (auto& col : need_read_from_file) {
+            col->Decompressed(tmp_bufs[i], blk_meta);
+            i++;
+          }
         }
-      }
+        // 现在vid + ts是有序的，可以直接应用二分查找
+        std::vector<uint16_t> idxs;
+        std::vector<int64_t> tss;
+        findMatchingIndices(tmp_vid_col->GetDataArr(), tmp_ts_col->GetDataArr(), tmp_idx_col->GetDataArr(),
+                            blk_meta->num, vid2svid(vid), lowerInclusive, upperExclusive, idxs, tss);
+
+        if (!idxs.empty()) {
+          for (int i = 0; i < (int)idxs.size(); i++) {
+            // build res row
+            Row resultRow;
+            resultRow.timestamp = tss[i];
+            memcpy(resultRow.vin.vin, engine_->vid2vin_[vid].c_str(), VIN_LENGTH);
+            for (size_t k = 0; k < colids.size(); k++) {
+              ColumnValue col;
+              cols[k]->Get(idxs[i], col);
+              resultRow.columns.insert(std::make_pair(engine_->columns_name_[cols[k]->GetColid()], std::move(col)));
+            }
+            results.push_back(std::move(resultRow));
+          }
+        }
+
+        read_cache_->Release(blk_meta, kColumnNum, tmp_vid_col);
+        read_cache_->Release(blk_meta, kColumnNum + 1, tmp_ts_col);
+        read_cache_->Release(blk_meta, kColumnNum + 2, tmp_idx_col);
+        for (size_t i = 0; i < colids.size(); i++) {
+          read_cache_->Release(blk_meta, colids[i], cols[i]);
+        }
+
+        for (auto& col : need_read_from_file) {
+          auto string_col = dynamic_cast<StringArrWrapper*>(col);
+          if (UNLIKELY(string_col != nullptr)) {
+            read_cache_->ReviseCacheSize(string_col);
+          }
+        }
+        father->wakeup_once();
+      };
+      this_coroutine::coro_scheduler()->addTask(std::move(func));
     }
+    this_coroutine::co_wait(blk_metas.size());
   }
 
   if (UNLIKELY(write_phase_)) {

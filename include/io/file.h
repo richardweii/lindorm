@@ -184,6 +184,11 @@ public:
     return Status::NotSupported;
   }
 
+  virtual Status burst() {
+    LOG_ASSERT(false, "Not implemented");
+    return Status::NotSupported;
+  }
+
   virtual ~AsyncFile() { io_destroy(ctx_); }
 
   static void done(IOContext* ioctx) {
@@ -206,6 +211,14 @@ public:
   void waitIOC() { cv_.wait(); }
 
 protected:
+  struct batch_job {
+    const char* buf;
+    uint32_t size;
+    int32_t offset;
+  };
+  batch_job batchs_[kMaxIONum];
+  int batch_idx_{0};
+
   io_context_t ctx_;
   IOContext iocb_data_[kMaxIONum];
   std::list<IOContext*> ctx_list_;
@@ -228,9 +241,9 @@ public:
 
   // NOT THREAD-SAFE，上层需要保证buf、len、offset都是512对齐的
   Status write(const char* buf, size_t length) override {
-    auto rc = async_write(buf, length);
-    this_coroutine::co_wait();
-    return rc;
+    async_write(buf, length);
+    burst();
+    return Status::OK;
   }
 
   // NOT THREAD-SAFE，上层需要保证buf、len、offset都是512对齐的
@@ -239,21 +252,38 @@ public:
     ENSURE((length & 511) == 0, "invalid length.");
     ENSURE(((uint64_t)buf & 511) == 0, "invalid buf address.");
 
-    iocb io;
-    iocb* p = &io;
-    io_prep_pwrite(&io, fd_, (void*)buf, length, file_sz_);
-
-    IOContext* ioctx = ctx_list_.front();
-    ctx_list_.pop_front();
-    ioctx->coro = this_coroutine::current();
-    io.data = ioctx;
-
-    int ret = io_submit(ctx_, 1, &p);
-    ENSURE(ret == 1, "io_submit failed");
-
+    auto& job = batchs_[batch_idx_++];
+    job.size = length;
+    job.buf = buf;
+    job.offset = file_sz_;
     file_sz_ += length;
     inflight_++;
+
     // LOG_DEBUG("[coro %d] [file %s] async write", this_coroutine::current()->id(), this->filename_.c_str());
+    return Status::OK;
+  }
+
+  Status burst() override {
+    iocb ios[batch_idx_];
+    iocb *iosp[batch_idx_];
+    for (int i = 0; i < batch_idx_; i++) {
+      iosp[i] = &ios[i];
+    }
+    for (int i = 0; i < batch_idx_; i++) {
+      auto& job = batchs_[i];
+      iocb* io = &ios[i];
+      io_prep_pwrite(io, fd_, (void*)job.buf, job.size, job.offset);
+
+      IOContext* ioctx = ctx_list_.front();
+      ctx_list_.pop_front();
+      ioctx->coro = this_coroutine::current();
+      io->data = ioctx;
+    }
+    int ret = io_submit(ctx_, batch_idx_, iosp);
+    ENSURE(ret == batch_idx_, "io_submit failed");
+    int cnt = batch_idx_;
+    batch_idx_ = 0;
+    this_coroutine::co_wait(cnt);
     return Status::OK;
   }
 };
@@ -273,8 +303,8 @@ public:
 
   // NOT THREAD-SAFE，上层需要保证buf、len、offset都是512对齐的
   Status read(char* res_buf, size_t length, off_t pos) override {
-    auto rc = async_read(res_buf, length, pos);
-    this_coroutine::co_wait();
+    async_read(res_buf, length, pos);
+    burst();
     return Status::OK;
   }
 
@@ -285,19 +315,36 @@ public:
     ENSURE(((uint64_t)res_buf & 511) == 0, "invalid res_buf.");
     ENSURE((pos & 511) == 0, "invalid pos.");
 
-    iocb io;
-    iocb* p = &io;
-    io_prep_pread(&io, fd_, (void*)res_buf, length, pos);
-
-    IOContext* ioctx = ctx_list_.front();
-    ctx_list_.pop_front();
-    ioctx->coro = this_coroutine::current();
-    io.data = ioctx;
-
-    int ret = io_submit(ctx_, 1, &p);
-    ENSURE(ret == 1, "io_submit failed");
+    auto& job = batchs_[batch_idx_++];
+    job.size = length;
+    job.buf = res_buf;
+    job.offset = pos;
 
     inflight_++;
+    return Status::OK;
+  }
+
+  Status burst() override {
+    iocb ios[batch_idx_];
+    iocb *iosp[batch_idx_];
+    for (int i = 0; i < batch_idx_; i++) {
+      iosp[i] = &ios[i];
+    }
+    for (int i = 0; i < batch_idx_; i++) {
+      auto& job = batchs_[i];
+      iocb* io = &ios[i];
+      io_prep_pread(io, fd_, (void*)job.buf, job.size, job.offset);
+
+      IOContext* ioctx = ctx_list_.front();
+      ctx_list_.pop_front();
+      ioctx->coro = this_coroutine::current();
+      io->data = ioctx;
+    }
+    int ret = io_submit(ctx_, batch_idx_, iosp);
+    ENSURE(ret == batch_idx_, "io_submit failed");
+    int cnt = batch_idx_;
+    batch_idx_ = 0;
+    this_coroutine::co_wait(cnt);
     return Status::OK;
   }
 };

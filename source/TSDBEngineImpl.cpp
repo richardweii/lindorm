@@ -288,9 +288,9 @@ int TSDBEngineImpl::write(const WriteRequest& writeRequest) {
   for (auto& row : writeRequest.rows) {
     uint16_t vid = getVidForWrite(row.vin);
 #ifdef ENABLE_STAT
-    if (print_row_cnt.fetch_add(1) <= 100) {
-      print_row(row, vid);
-    }
+    // if (print_row_cnt.fetch_add(1) <= 100) {
+    //   print_row(row, vid);
+    // }
 #endif
     int shard = sharding(vid);
     int tid = shard2tid(shard);
