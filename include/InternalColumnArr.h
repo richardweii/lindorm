@@ -2,6 +2,7 @@
 
 #include <sys/stat.h>
 
+#include <cmath>
 #include <cstdint>
 #include <cstring>
 #include <new>
@@ -14,17 +15,17 @@
 #include "io/io_manager.h"
 #include "struct/ColumnValue.h"
 #include "util/logging.h"
+#include "util/mem_pool.h"
 #include "util/stat.h"
 
 namespace LindormContest {
-
 /**
  * 封装了每个列具体的处理过程，对外提供统一的接口，上层调用者不需要考虑列的类型
  */
 template <typename T>
 class ColumnArr {
 public:
-  ColumnArr(int col_id, ColumnType type) : col_id_(col_id), type_(type) {}
+  ColumnArr(int col_id, MyColumnType type) : col_id_(col_id), type_(type) {}
   virtual ~ColumnArr() {}
 
   void Add(const ColumnValue& col, int idx) {
@@ -44,8 +45,16 @@ public:
         data_[idx] = (T)val;
         break;
       }
-      case COLUMN_TYPE_UNINITIALIZED:
-        break;
+      case COLUMN_TYPE_UNINITIALIZED: {
+        LOG_ASSERT(0, "error");
+      } break;
+    }
+    if (idx == 0) {
+      min = data_[idx];
+      max = data_[idx];
+    } else {
+      if (data_[idx] < min) min = data_[idx];
+      if (data_[idx] > max) max = data_[idx];
     }
   }
 
@@ -53,13 +62,11 @@ public:
   void Flush(AlignedWriteBuffer* buffer, int cnt, BlockMeta* meta) {
     uint64_t offset;
     uint64_t input_sz = cnt * sizeof(T);
-    uint64_t compress_buf_sz = max_dest_size_func(input_sz);
+    uint64_t compress_buf_sz = 0;
 
-    auto now = TIME_NOW;
-    auto compress_buf = reinterpret_cast<char*>(naive_alloc(compress_buf_sz));
-    auto now2 = TIME_NOW;
-    RECORD_FETCH_ADD(alloc_time, TIME_DURATION_US(now, now2));
-    uint64_t compress_sz = compress_func((const char*)data_, input_sz, compress_buf, compress_buf_sz);
+    char* compress_buf;
+    uint64_t compress_sz = 0;
+    TArrCompress(data_, cnt, min, max, compress_buf, compress_sz, type_);
 
     buffer->write(compress_buf, compress_sz, offset);
     naive_free(compress_buf);
@@ -110,8 +117,9 @@ public:
       }
     }
 
-    auto ret = decompress_func(compressed_data, (char*)data_, compress_sz, meta->origin_sz[col_id_]);
-    LOG_ASSERT(ret == (int)meta->origin_sz[col_id_], "uncompress error");
+    int cnt;
+    TArrDeCompress<T>(data_, cnt, meta->origin_sz[col_id_], compressed_data, meta->compress_sz[col_id_], type_);
+    LOG_ASSERT(cnt*sizeof(T) == (long unsigned int)meta->origin_sz[col_id_], "uncompress error");
     naive_free(buf);
   }
 
@@ -142,16 +150,17 @@ public:
     size_t compress_sz = meta->compress_sz[col_id_];
 
     compressed_data += (offset - file_read_off); // 偏移修正
-    auto ret = decompress_func(compressed_data, (char*)data_, compress_sz, meta->origin_sz[col_id_]);
-    LOG_ASSERT(ret == (int)meta->origin_sz[col_id_], "uncompress error");
+    int cnt;
+    TArrDeCompress(data_, cnt, meta->origin_sz[col_id_], compressed_data, compress_sz, type_);
+    LOG_ASSERT(cnt * sizeof(T) == (long unsigned int)meta->origin_sz[col_id_], "uncompress error, expect %lu ,but got %lu", meta->origin_sz[col_id_], cnt * sizeof(T));
     naive_free(data_buf);
   }
 
   void Get(int idx, ColumnValue& value) {
     switch (type_) {
-      case COLUMN_TYPE_STRING:
+      case MyColumnType::MyString:
         LOG_ASSERT(false, "should not run here");
-      case COLUMN_TYPE_INTEGER: {
+      case MyColumnType::MyInt32: {
         if (value.getColumnType() != COLUMN_TYPE_INTEGER) {
           free(value.columnData);
           value.columnType = COLUMN_TYPE_INTEGER;
@@ -162,7 +171,7 @@ public:
         }
         return;
       }
-      case COLUMN_TYPE_DOUBLE_FLOAT: {
+      case MyColumnType::MyDouble: {
         if (value.getColumnType() != COLUMN_TYPE_DOUBLE_FLOAT) {
           free(value.columnData);
           value.columnType = COLUMN_TYPE_DOUBLE_FLOAT;
@@ -173,7 +182,7 @@ public:
         }
         return;
       }
-      case COLUMN_TYPE_UNINITIALIZED:
+      default:
         LOG_ASSERT(false, "should not run here");
     }
     LOG_ASSERT(false, "should not run here");
@@ -188,8 +197,9 @@ public:
   const int col_id_;
 
   T data_[kMemtableRowNum];
-  // T max;
-  ColumnType type_;
+  T min;
+  T max;
+  MyColumnType type_;
 };
 
 template <>
@@ -214,28 +224,15 @@ public:
 
   // 元数据直接写到内存，内存里面的元数据在shutdown的时候会持久化的
   void Flush(AlignedWriteBuffer* buffer, int cnt, BlockMeta* meta) {
-    uint64_t offset;
     uint64_t writesz1 = cnt * sizeof(lens_[0]);
     uint64_t writesz2 = data_.size();
     uint64_t input_sz = writesz1 + writesz2;
-    auto now = TIME_NOW;
-    char* origin = reinterpret_cast<char*>(naive_alloc(input_sz));
-    auto now2 = TIME_NOW;
-    RECORD_FETCH_ADD(alloc_time, TIME_DURATION_US(now, now2));
-    memcpy(origin, lens_, writesz1);
-    memcpy(origin + writesz1, data_.c_str(), writesz2);
-    uint64_t compress_buf_sz = max_dest_size_func(input_sz);
-    auto now11 = TIME_NOW;
-    char* compress_buf = reinterpret_cast<char*>(naive_alloc(compress_buf_sz));
-    auto now111 = TIME_NOW;
-    RECORD_FETCH_ADD(alloc_time, TIME_DURATION_US(now11, now111));
-
-    uint64_t compress_sz = compress_func((const char*)origin, input_sz, compress_buf, compress_buf_sz);
+    char* compress_buf;
+    uint64_t compress_sz;
+    StringArrCompress(&data_, lens_, cnt, compress_buf, compress_sz);
 
     uint64_t off;
     buffer->write(compress_buf, compress_sz, off);
-
-    naive_free(origin);
     naive_free(compress_buf);
 
     meta->offset[col_id_] = off;
@@ -287,7 +284,7 @@ public:
       }
     }
 
-    auto ret = decompress_func(compress_data, origin_buf, compress_sz, origin_buf_sz);
+    auto ret = StringArrDeCompress(origin_buf, origin_buf_sz, compress_data, compress_sz);
     LOG_ASSERT(ret == (int)origin_buf_sz, "uncompress error");
 
     memcpy(lens_, origin_buf, sizeof(lens_[0]) * (meta->num));
@@ -337,7 +334,7 @@ public:
     char* compress_data = data_buf;
 
     compress_data += (offset - file_read_off); // 偏移修正
-    auto ret = decompress_func(compress_data, origin_buf, compress_sz, origin_buf_sz);
+    auto ret = StringArrDeCompress(origin_buf, origin_buf_sz, compress_data, compress_sz);
     LOG_ASSERT(ret == (int)origin_buf_sz, "uncompress error");
 
     memcpy(lens_, origin_buf, sizeof(lens_[0]) * (meta->num));
@@ -418,7 +415,7 @@ public:
 
 class IntArrWrapper : public ColumnArrWrapper {
 public:
-  IntArrWrapper(int col_id) { arr = new ColumnArr<int>(col_id, COLUMN_TYPE_INTEGER); }
+  IntArrWrapper(int col_id) { arr = new ColumnArr<int>(col_id, MyColumnType::MyInt32); }
 
   ~IntArrWrapper() { delete arr; }
 
@@ -448,7 +445,7 @@ private:
 
 class DoubleArrWrapper : public ColumnArrWrapper {
 public:
-  DoubleArrWrapper(int col_id) { arr = new ColumnArr<double>(col_id, COLUMN_TYPE_DOUBLE_FLOAT); }
+  DoubleArrWrapper(int col_id) { arr = new ColumnArr<double>(col_id, MyColumnType::MyDouble); }
 
   ~DoubleArrWrapper() { delete arr; }
 
@@ -464,7 +461,10 @@ public:
 
   void Get(int idx, ColumnValue& value) override { arr->Get(idx, value); }
 
-  int64_t GetVal(int idx) override { return arr->GetVal(idx); }
+  int64_t GetVal(int idx) override { 
+    LOG_ASSERT(false, "Not implemented");
+    return -1;
+  }
 
   void Reset() override { arr->Reset(); }
 
@@ -511,13 +511,22 @@ private:
 
 class VidArrWrapper : public ColumnArrWrapper {
 public:
-  VidArrWrapper(int col_id) { arr = new ColumnArr<uint16_t>(col_id, COLUMN_TYPE_INTEGER); }
+  VidArrWrapper(int col_id) { arr = new ColumnArr<uint16_t>(col_id, MyColumnType::MyUInt16); }
 
   ~VidArrWrapper() { delete arr; }
 
   void Add(const ColumnValue& col, int idx) override { arr->Add(col, idx); }
 
-  void Add(uint16_t svid, int idx) { arr->data_[idx] = svid; }
+  void Add(uint16_t svid, int idx) {
+    arr->data_[idx] = svid;
+    if (idx == 0) {
+      arr->min = svid;
+      arr->max = svid;
+    } else {
+      if ((uint16_t)arr->min > svid) arr->min = svid;
+      if ((uint16_t)arr->max < svid) arr->max = svid;
+    }
+  }
 
   void Flush(AlignedWriteBuffer* buffer, int cnt, BlockMeta* meta) override { arr->Flush(buffer, cnt, meta); }
 
@@ -545,13 +554,23 @@ private:
 
 class TsArrWrapper : public ColumnArrWrapper {
 public:
-  TsArrWrapper(int col_id) { arr = new ColumnArr<int64_t>(col_id, COLUMN_TYPE_DOUBLE_FLOAT); }
+  // 压缩算法按照列类型选择对应的策略，而Column文件不让改，加不了类型，所以用COLUMN_TYPE_UNINITIALIZED代表
+  TsArrWrapper(int col_id) { arr = new ColumnArr<int64_t>(col_id, MyColumnType::MyInt64); }
 
   ~TsArrWrapper() { delete arr; }
 
   void Add(const ColumnValue& col, int idx) override { arr->Add(col, idx); }
 
-  void Add(uint64_t ts, int idx) { arr->data_[idx] = ts; }
+  void Add(int64_t ts, int idx) {
+    arr->data_[idx] = ts;
+    if (idx == 0) {
+      arr->min = ts;
+      arr->max = ts;
+    } else {
+      if ((int64_t)arr->min > ts) arr->min = ts;
+      if ((int64_t)arr->max < ts) arr->max = ts;
+    }
+  }
 
   void Flush(AlignedWriteBuffer* buffer, int cnt, BlockMeta* meta) override { arr->Flush(buffer, cnt, meta); }
 
@@ -579,13 +598,13 @@ private:
 
 class IdxArrWrapper : public ColumnArrWrapper {
 public:
-  IdxArrWrapper(int col_id) { arr = new ColumnArr<uint16_t>(col_id, COLUMN_TYPE_INTEGER); }
+  IdxArrWrapper(int col_id) { arr = new ColumnArr<uint16_t>(col_id, MyColumnType::MyUInt16); }
 
   ~IdxArrWrapper() { delete arr; }
 
   void Add(const ColumnValue& col, int idx) override { arr->Add(col, idx); }
 
-  void Add(int idx_val, int idx) { arr->data_[idx] = idx_val; }
+  void Add(uint16_t idx_val, int idx) { arr->data_[idx] = idx_val; }
 
   void Flush(AlignedWriteBuffer* buffer, int cnt, BlockMeta* meta) override { arr->Flush(buffer, cnt, meta); }
 

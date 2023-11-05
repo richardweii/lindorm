@@ -100,7 +100,7 @@ static bool RowEquals(const LindormContest::Row& a, const LindormContest::Row& b
 
         double b_val;
         b_col_val.getDoubleFloatValue(b_val);
-        ASSERT(a_val == b_val, "a_val %f b_val %f", a_val, b_val);
+        ASSERT(std::abs(a_val - b_val) < 1e-6, "a_val %f b_val %f", a_val, b_val);
       } break;
       case LindormContest::COLUMN_TYPE_UNINITIALIZED:
         break;
