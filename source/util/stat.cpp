@@ -40,6 +40,7 @@ std::atomic<int64_t> print_row_cnt{0};
 std::atomic<int64_t> write_phase_sync{0};
 std::atomic<int64_t> all_equal_compress_cnt{0};
 std::atomic<int64_t> int_diff_compress_cnt{0};
+std::atomic<int64_t> ts_diff_compress_cnt{0};
 std::atomic<int64_t> zstd_compress_cnt{0};
 
 std::string types[] = {

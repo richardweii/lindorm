@@ -38,6 +38,8 @@ int IntAllEqualCompress(int int_arr[], int cnt, int min, int max, char* &buf, ui
 int IntAllEqualDeCompress(int int_arr[], int &cnt, char* buf, uint64_t size);
 int IntDiffCompress(int int_arr[], int cnt, int min, int max, char* &buf, uint64_t &size);
 int IntDiffDeCompress(int int_arr[], int &cnt, char* buf, uint64_t size);
+int TsDiffCompress(int64_t ts_arr[], int cnt, int64_t min, int64_t max, char* &buf, uint64_t &compress_size);
+int TsDiffDeCompress(int64_t ts_arr[], int &cnt, char* buf, uint64_t compress_size);
 
 /**
  * t_arr是需要压缩的泛型数组，cnt是数组的元素个数，min和max分别是数组的最大值和最小值
@@ -162,7 +164,7 @@ int TArrCompress(T t_arr[], int cnt, T min, T max, OUT char* &compress_buf, OUT 
     }
   } else if (col_type == MyColumnType::MyDouble) {
     DoubleArrCompress((double*)t_arr, cnt, min, max, compress_buf, size);
-  } else if (col_type == MyColumnType::MyUInt16 || col_type == MyColumnType::MyInt64) {
+  } else if (col_type == MyColumnType::MyUInt16) {
     uint64_t compress_buf_sz = ZSTDMaxDestSize(sizeof(T) * cnt) + 1; // +1是因为头部需要额外存一个字节的type
     auto now = TIME_NOW;
     compress_buf = reinterpret_cast<char*>(naive_alloc(compress_buf_sz));
@@ -170,6 +172,18 @@ int TArrCompress(T t_arr[], int cnt, T min, T max, OUT char* &compress_buf, OUT 
     RECORD_FETCH_ADD(alloc_time, TIME_DURATION_US(now, now2));
     compress_buf[0] = (char)CompressType::ZSTD;
     size = ZSTDCompress((const char*)t_arr, sizeof(T) * cnt, compress_buf+1, compress_buf_sz-1) + 1;
+  } else if (col_type == MyColumnType::MyInt64) {
+    if (TsDiffCompress((int64_t*)t_arr, cnt, min, max, compress_buf, size) == 0) {
+    } else {
+      // zstd 兜底
+      uint64_t compress_buf_sz = ZSTDMaxDestSize(sizeof(int64_t) * cnt) + 1; // +1是因为头部需要额外存一个字节的type
+      auto now = TIME_NOW;
+      compress_buf = reinterpret_cast<char*>(naive_alloc(compress_buf_sz));
+      auto now2 = TIME_NOW;
+      RECORD_FETCH_ADD(alloc_time, TIME_DURATION_US(now, now2));
+      compress_buf[0] = (char)CompressType::ZSTD;
+      size = ZSTDCompress((const char*)t_arr, sizeof(int64_t) * cnt, compress_buf+1, compress_buf_sz-1) + 1;
+    }
   } else {
     LOG_ASSERT(false, "should not run here");
   }
@@ -194,11 +208,21 @@ int TArrDeCompress(OUT T t_arr[], OUT int &cnt, int origin_sz, char* compress_bu
     }
   } else if (col_type == MyColumnType::MyDouble) {
     DoubleArrDeCompress((double*)t_arr, cnt, origin_sz, compress_buf, compress_size);
-  } else if (col_type == MyColumnType::MyUInt16 || col_type == MyColumnType::MyInt64) {
+  } else if (col_type == MyColumnType::MyUInt16) {
     LOG_ASSERT(compress_buf[0] == 2, "no zstd");
     // zstd decompress
     auto ret = ZSTDDeCompress((const char*)compress_buf+1, (char*)t_arr, compress_size-1, origin_sz);
     cnt = ret / sizeof(T);
+  } else if (col_type == MyColumnType::MyInt64) {
+    auto compress_type = compress_buf[0];
+    if (compress_type == (char)CompressType::INT_DIFFERENCE) {
+      TsDiffDeCompress((int64_t*)t_arr, cnt, compress_buf, compress_size);
+    } else {
+      LOG_ASSERT(compress_buf[0] == 2, "no zstd");
+      // zstd decompress
+      auto ret = ZSTDDeCompress((const char*)compress_buf+1, (char*)t_arr, compress_size-1, origin_sz);
+      cnt = ret / sizeof(T);
+    }
   }
 
   return 0;

@@ -26,7 +26,7 @@
 #include "util/logging.h"
 #include "util/util.h"
 
-#define ARR_NUM 8192
+#define ARR_NUM 256
 
 void printDoubleBinary(double value) {
     uint64_t* ptr = (uint64_t*)&value;
@@ -97,33 +97,60 @@ int main() {
   //   printDoubleBinary(d);
   // }
 
-  double double_arr[ARR_NUM];
-  double min;
-  double max;
+  // double double_arr[ARR_NUM];
+  // double min;
+  // double max;
+  // srandom(time(NULL));
+  // for (int i = 0; i < ARR_NUM; i++) {
+  //   double_arr[i] = 8860312 + rand() % 100 + ((rand() % 10000000000)*1.0 + 10000000000) / 10000000000;
+  //   if (i == 0) {
+  //     min = double_arr[i];
+  //     max = double_arr[i];
+  //   } else {
+  //     if (min > double_arr[i]) min = double_arr[i];
+  //     if (max < double_arr[i]) max = double_arr[i];
+  //   }
+  // }
+
+  // int origin_sz = sizeof(double) * ARR_NUM;
+  // char* compress_buf;
+  // uint64_t compress_size;
+  // LindormContest::DoubleArrCompress(double_arr, ARR_NUM, min, max, compress_buf, compress_size);
+  // LOG_INFO("my compress ratio %f\n", compress_size * 1.0 / origin_sz);
+
+  // double arr2[ARR_NUM];
+  // int cnt;
+  // LindormContest::DoubleArrDeCompress(arr2, cnt, origin_sz, compress_buf, compress_size);
+  // LOG_ASSERT(cnt == ARR_NUM, "cnt %d", cnt);
+  // for (int i = 0; i < ARR_NUM; i++) {
+  //   LOG_ASSERT(double_arr[i] == arr2[i], "%f <--> %f", double_arr[i], arr2[i]);
+  // }
+
+  int64_t ts_arr[ARR_NUM];
+  int64_t min;
+  int64_t max;
   srandom(time(NULL));
-  for (int i = 0; i < ARR_NUM; i++) {
-    double_arr[i] = 8860312 + rand() % 100 + ((rand() % 10000000000)*1.0 + 10000000000) / 10000000000;
-    if (i == 0) {
-      min = double_arr[i];
-      max = double_arr[i];
-    } else {
-      if (min > double_arr[i]) min = double_arr[i];
-      if (max < double_arr[i]) max = double_arr[i];
-    }
+  ts_arr[0] = 1694078524000;
+  min = ts_arr[0];
+  max = ts_arr[0];
+  for (int i = 1; i < ARR_NUM; i++) {
+    ts_arr[i] = ts_arr[i-1] + 1000;
+    if (min > ts_arr[i]) min = ts_arr[i];
+    if (max < ts_arr[i]) max = ts_arr[i];
   }
 
-  int origin_sz = sizeof(double) * ARR_NUM;
+  int origin_sz = sizeof(int64_t) * ARR_NUM;
   char* compress_buf;
   uint64_t compress_size;
-  LindormContest::DoubleArrCompress(double_arr, ARR_NUM, min, max, compress_buf, compress_size);
+  LindormContest::TsDiffCompress(ts_arr, ARR_NUM, min, max, compress_buf, compress_size);
   LOG_INFO("my compress ratio %f\n", compress_size * 1.0 / origin_sz);
 
-  double arr2[ARR_NUM];
+  int64_t arr2[ARR_NUM];
   int cnt;
-  LindormContest::DoubleArrDeCompress(arr2, cnt, origin_sz, compress_buf, compress_size);
+  LindormContest::TsDiffDeCompress(arr2, cnt, compress_buf, compress_size);
   LOG_ASSERT(cnt == ARR_NUM, "cnt %d", cnt);
   for (int i = 0; i < ARR_NUM; i++) {
-    LOG_ASSERT(double_arr[i] == arr2[i], "%f <--> %f", double_arr[i], arr2[i]);
+    LOG_ASSERT(ts_arr[i] == arr2[i], "%ld <--> %ld", ts_arr[i], arr2[i]);
   }
 
   LOG_INFO("PASS");
