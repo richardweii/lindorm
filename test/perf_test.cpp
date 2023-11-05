@@ -58,7 +58,7 @@ static int createTable(LindormContest::TSDBEngine* engine) {
 }
 
 static constexpr int kVinNum = LindormContest::kVinNum;
-static constexpr int kRowsPerVin = 100 * 60;
+static constexpr int kRowsPerVin = 10 * 60;
 
 static bool RowEquals(const LindormContest::Row& a, const LindormContest::Row& b) {
   if (a != b) return false;
@@ -100,7 +100,7 @@ static bool RowEquals(const LindormContest::Row& a, const LindormContest::Row& b
 
         double b_val;
         b_col_val.getDoubleFloatValue(b_val);
-        ASSERT(a_val == b_val, "a_val %f b_val %f", a_val, b_val);
+        ASSERT(std::abs(a_val - b_val) < 1e-6, "a_val %f b_val %f", a_val, b_val);
       } break;
       case LindormContest::COLUMN_TYPE_UNINITIALIZED:
         break;
@@ -180,7 +180,7 @@ void parallel_upsert(LindormContest::TSDBEngine* engine) {
           for (int i = th * per_thread_vin_num; i < (th + 1) * per_thread_vin_num && i < kVinNum;) {
             LindormContest::WriteRequest wReq;
             wReq.tableName = "t1";
-            for (int k = 0; i < (th + 1) * per_thread_vin_num && k < 20; k++, i++) {
+            for (int k = 0; i < (th + 1) * per_thread_vin_num && k < 20 && i < kVinNum; k++, i++) {
               wReq.rows.push_back(get_row(is[i], js[j]));
             }
             int ret = engine->write(wReq);

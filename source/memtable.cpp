@@ -102,7 +102,6 @@ bool MemTable::Write(uint16_t svid, const Row& row) {
     columnArrs_[colid++]->Add(col.second, cnt_);
   }
 
-  // TODO: 不用ColumnValue
   // 写入vid列
   svid_col_->Add(svid, cnt_);
 

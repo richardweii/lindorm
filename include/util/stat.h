@@ -39,6 +39,10 @@ extern std::atomic<int64_t> alloc_time;
 extern std::atomic<int64_t> wait_aio;
 extern std::atomic<int64_t> print_row_cnt;
 
+extern std::atomic<int64_t> all_equal_compress_cnt;
+extern std::atomic<int64_t> int_diff_compress_cnt;
+extern std::atomic<int64_t> zstd_compress_cnt;
+
 #define ENABLE_STAT
 #ifdef ENABLE_STAT
 #define RECORD_FETCH_ADD(num, delta) (num.fetch_add(delta))

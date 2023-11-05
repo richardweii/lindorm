@@ -282,6 +282,7 @@ int TSDBEngineImpl::shutdown() {
   return 0;
 }
 
+std::mutex mm;
 int TSDBEngineImpl::write(const WriteRequest& writeRequest) {
   RECORD_FETCH_ADD(write_cnt, writeRequest.rows.size());
   std::vector<std::vector<Row>> rows(kWorkerThread);
@@ -289,7 +290,9 @@ int TSDBEngineImpl::write(const WriteRequest& writeRequest) {
     uint16_t vid = getVidForWrite(row.vin);
 #ifdef ENABLE_STAT
     // if (print_row_cnt.fetch_add(1) <= 100) {
+    //   mm.lock();
     //   print_row(row, vid);
+    //   mm.unlock();
     // }
 #endif
     int shard = sharding(vid);

@@ -476,7 +476,7 @@ void parallel_downsample(LindormContest::TSDBEngine* engine, LindormContest::Agg
         if (op == LindormContest::MAX) {
           if (cmp_t == LindormContest::GREATER) {
             if (type == 0) {
-              for (int j = 0; j < trReadRes.size(); j++) {
+              for (int j = 0; j < (int)trReadRes.size(); j++) {
                 auto& r = trReadRes[j];
                 int got;
                 r.columns.at(col_name).getIntegerValue(got);
@@ -487,7 +487,7 @@ void parallel_downsample(LindormContest::TSDBEngine* engine, LindormContest::Agg
                 ASSERT(::memcmp(r.vin.vin, rows[i][0].vin.vin, LindormContest::VIN_LENGTH) == 0, "vin not equal");
               }
             } else if (type == 1) {
-              for (int j = 0; j < trReadRes.size(); j++) {
+              for (int j = 0; j < (int)trReadRes.size(); j++) {
                 auto& r = trReadRes[j];
                 double got;
                 r.columns.at(col_name).getDoubleFloatValue(got);
@@ -500,7 +500,7 @@ void parallel_downsample(LindormContest::TSDBEngine* engine, LindormContest::Agg
             }
           } else if (cmp_t == LindormContest::EQUAL) {
             if (type == 0) {
-              for (int j = 0; j < trReadRes.size(); j++) {
+              for (int j = 0; j < (int)trReadRes.size(); j++) {
                 auto& r = trReadRes[j];
                 int got;
                 r.columns.at(col_name).getIntegerValue(got);
@@ -513,7 +513,7 @@ void parallel_downsample(LindormContest::TSDBEngine* engine, LindormContest::Agg
                 ASSERT(::memcmp(r.vin.vin, rows[i][0].vin.vin, LindormContest::VIN_LENGTH) == 0, "vin not equal");
               }
             } else if (type == 1) {
-              for (int j = 0; j < trReadRes.size(); j++) {
+              for (int j = 0; j < (int)trReadRes.size(); j++) {
                 auto& r = trReadRes[j];
                 double got;
                 r.columns.at(col_name).getDoubleFloatValue(got);
@@ -530,7 +530,7 @@ void parallel_downsample(LindormContest::TSDBEngine* engine, LindormContest::Agg
 
         } else if (op == LindormContest::AVG) {
           if (cmp_t == LindormContest::GREATER) {
-            for (int j = 0; j < trReadRes.size(); j++) {
+            for (int j = 0; j < (int)trReadRes.size(); j++) {
               auto& r = trReadRes[j];
               double got;
               r.columns.at(col_name).getDoubleFloatValue(got);
@@ -546,7 +546,7 @@ void parallel_downsample(LindormContest::TSDBEngine* engine, LindormContest::Agg
               ASSERT(::memcmp(r.vin.vin, rows[i][0].vin.vin, LindormContest::VIN_LENGTH) == 0, "vin not equal");
             }
           } else if (cmp_t == LindormContest::EQUAL) {
-            for (int j = 0; j < trReadRes.size(); j++) {
+            for (int j = 0; j < (int)trReadRes.size(); j++) {
               auto& r = trReadRes[j];
               double got;
               r.columns.at(col_name).getDoubleFloatValue(got);
