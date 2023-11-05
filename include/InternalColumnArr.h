@@ -220,6 +220,13 @@ public:
     offset_ += pair.first;
     offsets_[idx + 1] = offset_;
     lens_[idx] = pair.first;
+    if (idx == 0) {
+      min = lens_[idx];
+      max = lens_[idx];
+    } else {
+      if (lens_[idx] < min) min = lens_[idx];
+      if (lens_[idx] > max) max = lens_[idx];
+    }
   }
 
   // 元数据直接写到内存，内存里面的元数据在shutdown的时候会持久化的
@@ -229,7 +236,7 @@ public:
     uint64_t input_sz = writesz1 + writesz2;
     char* compress_buf;
     uint64_t compress_sz;
-    StringArrCompress(&data_, lens_, cnt, compress_buf, compress_sz);
+    StringArrCompress(&data_, lens_, cnt, min, max, compress_buf, compress_sz);
 
     uint64_t off;
     buffer->write(compress_buf, compress_sz, off);
@@ -385,6 +392,8 @@ private:
   uint32_t offset_;
   uint32_t offsets_[kMemtableRowNum + 1];
   uint16_t lens_[kMemtableRowNum];
+  uint16_t min;
+  uint16_t max;
   std::string data_;
 };
 

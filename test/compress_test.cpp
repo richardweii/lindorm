@@ -34,7 +34,7 @@ void printDoubleBinary(double value) {
 
     for (int i = 63; i >= 0; i--) {
         uint64_t bit = (bits >> i) & 1;
-        printf("%llu", bit);
+        printf("%lu", bit);
 
         if (i == 63 || i == 52) {
             printf(" "); // 添加空格以分隔符号位、阶码和尾数
@@ -126,11 +126,11 @@ int main() {
   //   LOG_ASSERT(double_arr[i] == arr2[i], "%f <--> %f", double_arr[i], arr2[i]);
   // }
 
-  int64_t ts_arr[ARR_NUM];
-  int64_t min;
-  int64_t max;
+  double ts_arr[ARR_NUM];
+  double min;
+  double max;
   srandom(time(NULL));
-  ts_arr[0] = 1694078524000;
+  ts_arr[0] = 12323.12123;
   min = ts_arr[0];
   max = ts_arr[0];
   for (int i = 1; i < ARR_NUM; i++) {
@@ -139,15 +139,15 @@ int main() {
     if (max < ts_arr[i]) max = ts_arr[i];
   }
 
-  int origin_sz = sizeof(int64_t) * ARR_NUM;
+  int origin_sz = sizeof(double) * ARR_NUM;
   char* compress_buf;
   uint64_t compress_size;
-  LindormContest::TsDiffCompress(ts_arr, ARR_NUM, min, max, compress_buf, compress_size);
+  LindormContest::TArrCompress(ts_arr, ARR_NUM, min, max, compress_buf, compress_size, LindormContest::MyColumnType::MyDouble);
   LOG_INFO("my compress ratio %f\n", compress_size * 1.0 / origin_sz);
 
-  int64_t arr2[ARR_NUM];
+  double arr2[ARR_NUM];
   int cnt;
-  LindormContest::TsDiffDeCompress(arr2, cnt, compress_buf, compress_size);
+  LindormContest::TArrDeCompress(arr2, cnt, sizeof(double) * ARR_NUM, compress_buf, compress_size, LindormContest::MyColumnType::MyDouble);
   LOG_ASSERT(cnt == ARR_NUM, "cnt %d", cnt);
   for (int i = 0; i < ARR_NUM; i++) {
     LOG_ASSERT(ts_arr[i] == arr2[i], "%ld <--> %ld", ts_arr[i], arr2[i]);
