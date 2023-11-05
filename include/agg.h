@@ -39,7 +39,7 @@ protected:
     return true;
   }
 
-  TReslut res_{};
+  TReslut res_{0};
   bool empty_{true};
   bool need_filter_{false};
   CompareOp cmp_{};

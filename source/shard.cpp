@@ -92,6 +92,8 @@ void ShardImpl::Init() {
         VinFileName(engine_->dataDirPath, kTableName, svid2vid(shard_id_, i)), shard2tid(shard_id_));
     }
     block_mgr_[i] = new BlockMetaManager();
+    write_buf_[i] = nullptr;
+    memtable_[i] = nullptr;
   }
 
   size_t read_cache_sz = write_phase ? kReadCacheSize / 8 : kReadCacheSize;

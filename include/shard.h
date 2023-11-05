@@ -241,7 +241,6 @@ inline void ShardImpl::aggregateImpl2(uint64_t vid, int64_t lowerInclusive, int6
           ColumnValue col;
           std::vector<ColumnArrWrapper*> need_read_from_file;
           // 去读对应列的block
-          need_read_from_file.clear();
 
           bool hit;
 
