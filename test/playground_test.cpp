@@ -249,7 +249,50 @@ private:
   }
 };
 
+#define TO_DOUBLE(a) *((double*)(&a))
+
+int cnt = 0;
+struct Foo {
+  Foo() {
+    a = cnt++;
+    ::printf("ctor :%p, foo %d\n", this, a);
+  }
+
+  Foo(const Foo& f) { ::printf("copy ctor this:%p, f:%p\n", this, &f); }
+
+  Foo(const Foo&& f) { ::printf("move ctor this:%p, f:%p\n", this, &f); }
+
+  ~Foo() { ::printf("dtor :%p, foo %d\n", this, a); }
+
+  int a{0};
+  bool operator==(const Foo& f) const { return f.a == a; }
+};
+
+struct FooHasher {
+  size_t operator()(const Foo& f) const { return f.a; }
+};
+
+struct FooEqualer {
+  bool operator()(const Foo& f1, const Foo& f2) const { return f1.a == f2.a; }
+};
+
+std::unordered_map<Foo, std::list<Foo>::iterator, FooHasher, FooEqualer> cache;
+std::list<Foo> ll;
+std::list<Foo> ll2;
+
+void moveNode(const Foo& node, std::list<Foo>& from, std::list<Foo>& to) {
+  from.erase(cache[node]);
+  to.push_front(node);
+  cache[node] = to.begin();
+}
+
 int main() {
-  play_libaio();
+  Foo f;
+  ll.push_front(f);
+
+  cache[f] = ll.begin();
+  auto iter = cache.find(f);
+  auto node = *iter->second;
+  moveNode(node, ll, ll2);
   return 0;
 }

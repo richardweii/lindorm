@@ -20,6 +20,11 @@ inline std::string ShardDataFileName(const std::string& kDataDirPath, const std:
   return kDataDirPath + "/" + tableName + "_" + NumToStr<uint16_t>(shardid) + ".data";
 }
 
+inline std::string VinFileName(const std::string& kDataDirPath, const std::string& tableName, uint16_t vid) {
+  LOG_ASSERT(kDataDirPath != "", "kDataDirPath: %s", kDataDirPath.c_str());
+  return kDataDirPath + "/" + tableName + "_" + NumToStr<uint16_t>(vid) + ".data";
+}
+
 // 每个shard的元数据的文件名
 inline std::string ShardMetaFileName(const std::string& kDataDirPath, const std::string& tableName, uint16_t shardid) {
   LOG_ASSERT(kDataDirPath != "", "kDataDirPath: %s", kDataDirPath.c_str());

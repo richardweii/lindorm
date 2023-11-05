@@ -35,38 +35,33 @@ void MemTable::Init() {
     }
   }
   // vid col
-  svid_col_ = new VidArrWrapper(kColumnNum);
+  // svid_col_ = new VidArrWrapper(kColumnNum);
   // ts col
-  ts_col_ = new TsArrWrapper(kColumnNum + 1);
+  ts_col_ = new TsArrWrapper(kColumnNum);
   // idx col
-  idx_col_ = new IdxArrWrapper(kColumnNum + 2);
+  // idx_col_ = new IdxArrWrapper(kColumnNum + 2);
 
   for (int i = 0; i < kVinNumPerShard; i++) {
-    min_ts_[i] = INT64_MAX;
-    max_ts_[i] = INT64_MIN;
-    mem_latest_row_idx_[i] = -1;
-    mem_latest_row_ts_[i] = -1;
+    min_ts_ = INT64_MAX;
+    max_ts_ = INT64_MIN;
+    mem_latest_row_idx_ = -1;
+    mem_latest_row_ts_ = -1;
+    for (int i = 0; i < kColumnNum; i++) {
+      max_val_[i] = 0;
+      sum_val_[i] = 0;
+    }
   }
-}
-
-void MemTable::sort() {
-  // 先对 vid + ts idx这三列进行排序
-  uint16_t* vid_datas = svid_col_->GetDataArr();
-  int64_t* ts_datas = ts_col_->GetDataArr();
-  uint16_t* idx_datas = idx_col_->GetDataArr();
-
-  quickSort(vid_datas, ts_datas, idx_datas, 0, cnt_ - 1);
 }
 
 void MemTable::GetRowsFromTimeRange(uint64_t vid, int64_t lowerInclusive, int64_t upperExclusive,
                                     const std::vector<int>& colids, std::vector<Row>& results) {
   // 首先看memtable当中是否有符合要求的数据
   int svid = vid2svid(vid);
-  if (!(min_ts_[svid] >= upperExclusive || max_ts_[svid] < lowerInclusive)) {
+  if (!(min_ts_ >= upperExclusive || max_ts_ < lowerInclusive)) {
     // 有重合，需要遍历memtable，首先找到vin + ts符合要求的行索引
     std::vector<int> idxs;
     for (int i = 0; i < cnt_; i++) {
-      if (svid_col_->GetVal(i) == (int64_t)svid && inRange(ts_col_->GetVal(i), lowerInclusive, upperExclusive)) {
+      if (inRange(ts_col_->GetVal(i), lowerInclusive, upperExclusive)) {
         idxs.emplace_back(i);
       }
     }
@@ -91,26 +86,59 @@ void MemTable::GetRowsFromTimeRange(uint64_t vid, int64_t lowerInclusive, int64_
 
 bool MemTable::Write(uint16_t svid, const Row& row) {
   //  更新本memtable中的最新row信息
-  if (mem_latest_row_ts_[svid] < row.timestamp) {
-    mem_latest_row_ts_[svid] = row.timestamp;
-    mem_latest_row_idx_[svid] = cnt_;
+  if (mem_latest_row_ts_ < row.timestamp) {
+    mem_latest_row_ts_ = row.timestamp;
+    mem_latest_row_idx_ = cnt_;
   }
 
   int colid = 0;
   for (auto& col : row.columns) {
     LOG_ASSERT(col.first == engine_->columns_name_[colid], "invalid column");
-    columnArrs_[colid++]->Add(col.second, cnt_);
+    columnArrs_[colid]->Add(col.second, cnt_);
+    auto& col_val = col.second;
+    switch (col_val.columnType) {
+      case COLUMN_TYPE_INTEGER: {
+        int cur;
+        col_val.getIntegerValue(cur);
+
+        int max = TO_INT(max_val_[colid]);
+        if (cur > max || cnt_ == 0) {
+          TO_INT(max_val_[colid]) = cur;
+        }
+
+        // int64 防止溢出
+        int64_t sum = TO_INT64(sum_val_[colid]);
+        TO_INT64(sum_val_[colid]) = cur + sum;
+        break;
+      }
+      case COLUMN_TYPE_DOUBLE_FLOAT: {
+        double cur;
+        col_val.getDoubleFloatValue(cur);
+
+        double max = TO_DOUBLE(max_val_[colid]);
+        if (cur > max || cnt_ == 0) {
+          TO_DOUBLE(max_val_[colid]) = cur;
+        }
+
+        double sum = TO_DOUBLE(sum_val_[colid]);
+        TO_DOUBLE(sum_val_[colid]) = cur + sum;
+        break;
+      }
+      default:
+        break;
+    }
+    colid++;
   }
 
   // TODO: 不用ColumnValue
   // 写入vid列
-  svid_col_->Add(svid, cnt_);
+  // svid_col_->Add(svid, cnt_);
 
   // 写入ts列
   ts_col_->Add(row.timestamp, cnt_);
 
   // 写入idx列
-  idx_col_->Add(cnt_, cnt_);
+  // idx_col_->Add(cnt_, cnt_);
 
   updateTs(row.timestamp, svid);
   cnt_++;
@@ -119,25 +147,24 @@ bool MemTable::Write(uint16_t svid, const Row& row) {
 };
 
 void MemTable::Reset() {
-  for (int i = 0; i < kVinNumPerShard; i++) {
-    min_ts_[i] = INT64_MAX;
-    max_ts_[i] = INT64_MIN;
-    mem_latest_row_idx_[i] = -1;
-    mem_latest_row_ts_[i] = -1;
-  }
+  min_ts_ = INT64_MAX;
+  max_ts_ = INT64_MIN;
+  mem_latest_row_idx_ = -1;
+  mem_latest_row_ts_ = -1;
   cnt_ = 0;
   for (int i = 0; i < kColumnNum; i++) {
     columnArrs_[i]->Reset();
+    max_val_[i] = 0;
+    sum_val_[i] = 0;
   }
-  svid_col_->Reset();
   ts_col_->Reset();
   in_flush_ = false;
 }
 
 void MemTable::GetLatestRow(uint16_t svid, const std::vector<int>& colids, Row& row) {
   // 最新的row在内存当中
-  int mem_lat_idx = mem_latest_row_idx_[svid];
-  row.timestamp = mem_latest_row_ts_[svid];
+  int mem_lat_idx = mem_latest_row_idx_;
+  row.timestamp = mem_latest_row_ts_;
   memcpy(row.vin.vin, engine_->vid2vin_[svid2vid(shard_id_, svid)].c_str(), VIN_LENGTH);
   for (auto col_id : colids) {
     ColumnValue col_value;

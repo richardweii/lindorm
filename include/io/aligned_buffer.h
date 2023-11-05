@@ -58,6 +58,7 @@ public:
       if (offset_ == kWriteBufferSize) {
         // 异步写
         in_flush_ = true;
+        LOG_DEBUG("[tid %d] [coro %d] start flush.", this_coroutine::coro_scheduler()->tid(), this_coroutine::current()->id());
         auto rc = file_->write((const char*)buffer_, kWriteBufferSize);
         in_flush_ = false;
         cv_.notify(); // 通知其他协程开始flush数据

@@ -23,11 +23,11 @@ constexpr int kShardBits = 7;
 // 按照vin进行分片的数量，最好保证和kVinNum是整除的关系，这样每个分片的vin数量是均匀的
 constexpr int kShardNum = 1 << kShardBits;
 constexpr int kVinNumPerShard = (kVinNum / kShardNum) + 1; // 打到每个memtable里面vin的个数
-constexpr int kMemtableRowNum = 8 * KB;                    // 一个memtable里面最多存储多少行数据
-constexpr int kExtraColNum = 3;
-constexpr int kWriteBufferSize = 1024 * KB;
+constexpr int kMemtableRowNum = 256;                    // 一个memtable里面最多存储多少行数据
+constexpr int kExtraColNum = 1;
+constexpr int kWriteBufferSize = 256 * KB;
 constexpr size_t kReadCacheSize = 40 * MB;
-constexpr int kWorkerThread = 16;
+constexpr int kWorkerThread = 8;
 constexpr int kCoroutinePerThread = 32;
 // constexpr size_t kMemoryPoolSz = 1 * 1024 * MB; // 1GB临时内存
 #else
@@ -74,7 +74,7 @@ static inline int vid2svid(uint16_t vid) {
 }
 
 static inline int svid2vid(int shard_id, int idx) {
-  LOG_ASSERT((shard_id + (idx << kShardBits)) < kVinNum, "vid = %d", shard_id + (idx << kShardBits));
+  LOG_ASSERT((shard_id + (idx << kShardBits)) < (kVinNumPerShard * kShardNum), "vid = %d", shard_id + (idx << kShardBits));
   return shard_id + (idx << kShardBits);
 }
 

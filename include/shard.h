@@ -1,6 +1,7 @@
 #pragma once
 #include <unordered_map>
 
+#include "agg.h"
 #include "memtable.h"
 #include "util/likely.h"
 #include "util/util.h"
@@ -45,6 +46,7 @@ public:
       res = new TColumn(colid);
       PutColumn(meta, colid, res);
     }
+    ENSURE(res != nullptr, "new failed.");
     return dynamic_cast<TColumn*>(res);
   };
 
@@ -108,7 +110,7 @@ public:
     }
   }
   ~ShardImpl();
-  void Init(bool write_phase, File* data_file);
+  void Init();
 
   void InitMemTable();
 
@@ -129,15 +131,26 @@ public:
 
   void LoadLatestRowCache(File* file);
 
-  void SaveBlockMeta(File* file) { block_mgr_->Save(file); }
+  void SaveBlockMeta(File* file) {
+    for (int i = 0; i < kVinNumPerShard; i++) {
+      block_mgr_[i]->Save(file);
+    }
+  }
 
-  void LoadBlockMeta(File* file) { block_mgr_->Load(file); }
-
-  Status Flush(bool shutdown = false);
+  void LoadBlockMeta(File* file) {
+    for (int i = 0; i < kVinNumPerShard; i++) {
+      block_mgr_[i]->Load(file);
+    }
+  }
+  Status Flush(uint16_t svid, bool shutdown = false);
 
 private:
   template <typename TAgg, typename TCol>
   void aggregateImpl2(uint64_t vid, int64_t lowerInclusive, int64_t upperExclusive, int colid, std::vector<Row>& res);
+
+  // 单独抽出来特化这部分，用来向泛型的Agg容器里面加入blockmeta中缓存的内容，使得可以兼容原始的Agg容器语义
+  template <typename TAgg, typename TCol>
+  void aggAdd(TAgg* agg, int colid, BlockMeta* meta);
 
   template <typename TAgg, typename TCol>
   void aggregateImpl(const std::vector<Row>& input, const std::string& col_name, Row& res);
@@ -150,18 +163,13 @@ private:
 
   int shard_id_;
   TSDBEngineImpl* engine_{nullptr};
-  File* data_file_{nullptr};
+  File* data_file_[kVinNumPerShard]{nullptr};
 
-  bool write_phase_ = false;
+  ReadCache* read_cache_{nullptr};               // for read phase
+  MemTable* memtable_[kVinNumPerShard]{nullptr}; // for write phase
+  AlignedWriteBuffer* write_buf_[kVinNumPerShard]{nullptr};
 
-  ReadCache* read_cache_{nullptr}; // for read phase
-
-  MemTable* two_memtable_[2]{nullptr}; // 0 - 1 当一个在flush的时候使用另一个
-  uint8_t memtable_id{0};
-  MemTable* volatile memtable_{nullptr}; // for write phase
-  AlignedWriteBuffer* write_buf_{nullptr};
-
-  BlockMetaManager* block_mgr_{nullptr};
+  BlockMetaManager* block_mgr_[kVinNumPerShard]{nullptr};
 
   // LatestQueryCache
   // Row latest_row_cache[kVinNumPerShard];
@@ -216,106 +224,71 @@ template <typename TAgg, typename TCol>
 inline void ShardImpl::aggregateImpl2(uint64_t vid, int64_t lowerInclusive, int64_t upperExclusive, int colid,
                                       std::vector<Row>& res) {
   TAgg agg;
-
+  uint16_t svid = vid2svid(vid);
   std::vector<BlockMeta*> blk_metas;
-  block_mgr_->GetVinBlockMetasByTimeRange(vid, lowerInclusive, upperExclusive, blk_metas);
+  block_mgr_[svid]->GetVinBlockMetasByTimeRange(vid, lowerInclusive, upperExclusive, blk_metas);
 
-  File* rfile = data_file_;
+  File* rfile = data_file_[svid];
   if (!blk_metas.empty()) {
     RECORD_FETCH_ADD(disk_blk_access_cnt, blk_metas.size());
+    int sub_task_num = 0;
     for (auto blk_meta : blk_metas) {
-      auto func = [this, blk_meta, colid, vid, lowerInclusive, upperExclusive, father = this_coroutine::current(), &agg,
-                   rfile]() {
-        ColumnValue col;
-        std::vector<uint16_t> idxs;
-        std::vector<int64_t> tss;
-        std::vector<ColumnArrWrapper*> need_read_from_file;
-        std::vector<char*> tmp_bufs;
-        // 去读对应列的block
-        need_read_from_file.clear();
-        tmp_bufs.clear();
+      if (lowerInclusive <= blk_meta->min_ts && blk_meta->max_ts < upperExclusive) {
+        aggAdd<TAgg, TCol>(&agg, colid, blk_meta);
+      } else {
+        auto func = [this, blk_meta, colid, vid, lowerInclusive, upperExclusive, father = this_coroutine::current(),
+                     &agg, rfile, svid]() {
+          ColumnValue col;
+          std::vector<ColumnArrWrapper*> need_read_from_file;
+          // 去读对应列的block
+          need_read_from_file.clear();
 
-        bool hit;
-        VidArrWrapper* tmp_vid_col = read_cache_->FetchDataArr<VidArrWrapper>(blk_meta, kColumnNum, hit);
-        if (!hit) need_read_from_file.push_back(tmp_vid_col);
+          bool hit;
 
-        TsArrWrapper* tmp_ts_col = read_cache_->FetchDataArr<TsArrWrapper>(blk_meta, kColumnNum + 1, hit);
-        if (!hit) need_read_from_file.push_back(tmp_ts_col);
+          TsArrWrapper* tmp_ts_col = read_cache_->FetchDataArr<TsArrWrapper>(blk_meta, kColumnNum, hit);
+          if (!hit) need_read_from_file.push_back(tmp_ts_col);
 
-        IdxArrWrapper* tmp_idx_col = read_cache_->FetchDataArr<IdxArrWrapper>(blk_meta, kColumnNum + 2, hit);
-        if (!hit) need_read_from_file.push_back(tmp_idx_col);
+          ColumnArrWrapper* agg_col = nullptr;
 
-        ColumnArrWrapper* agg_col = nullptr;
+          switch (engine_->columns_type_[colid]) {
+            case COLUMN_TYPE_INTEGER:
+              agg_col = read_cache_->FetchDataArr<IntArrWrapper>(blk_meta, colid, hit);
+              if (!hit) need_read_from_file.push_back(agg_col);
+              break;
+            case COLUMN_TYPE_DOUBLE_FLOAT:
+              agg_col = read_cache_->FetchDataArr<DoubleArrWrapper>(blk_meta, colid, hit);
+              if (!hit) need_read_from_file.push_back(agg_col);
+              break;
+            default:
+              LOG_ASSERT(false, "error");
+              break;
+          }
+          for (auto& col : need_read_from_file) {
+            // 异步非Batch IO
+            col->Read(rfile, write_buf_[svid], blk_meta);
+          }
 
-        switch (engine_->columns_type_[colid]) {
-          case COLUMN_TYPE_STRING:
-            agg_col = read_cache_->FetchDataArr<StringArrWrapper>(blk_meta, colid, hit);
-            if (!hit) need_read_from_file.push_back(agg_col);
-            break;
-          case COLUMN_TYPE_INTEGER:
-            agg_col = read_cache_->FetchDataArr<IntArrWrapper>(blk_meta, colid, hit);
-            if (!hit) need_read_from_file.push_back(agg_col);
-            break;
-          case COLUMN_TYPE_DOUBLE_FLOAT:
-            agg_col = read_cache_->FetchDataArr<DoubleArrWrapper>(blk_meta, colid, hit);
-            if (!hit) need_read_from_file.push_back(agg_col);
-            break;
-          case COLUMN_TYPE_UNINITIALIZED:
-            LOG_ASSERT(false, "error");
-            break;
-        }
-
-        AsyncFile* async_rf = dynamic_cast<AsyncFile*>(rfile);
-        LOG_ASSERT(async_rf != nullptr, "invalid cast");
-
-        // 同时下发多个异步读IO
-        while (async_rf->avalibaleIOC() < need_read_from_file.size()) {
-          RECORD_FETCH_ADD(wait_aio, 1);
-          async_rf->waitIOC();
-        }
-        for (auto& col : need_read_from_file) {
-          // 储存用于异步IO的buf
-          tmp_bufs.push_back(col->AsyncReadCompressed(async_rf, blk_meta));
-        }
-
-        async_rf->burst();
-
-        int i = 0;
-        for (auto& col : need_read_from_file) {
-          col->Decompressed(tmp_bufs[i], blk_meta);
-          i++;
-        }
-        idxs.clear();
-        tss.clear();
-        // 现在vid + ts是有序的，可以直接应用二分查找
-        findMatchingIndices(tmp_vid_col->GetDataArr(), tmp_ts_col->GetDataArr(), tmp_idx_col->GetDataArr(),
-                            blk_meta->num, vid2svid(vid), lowerInclusive, upperExclusive, idxs, tss);
-
-        if (!idxs.empty()) {
-          for (int i = 0; i < (int)idxs.size(); i++) {
+          auto tss = tmp_ts_col->GetDataArr();
+          for (int i = 0; i < blk_meta->num; i++) {
             // fill aggragate container.
-            agg_col->Get(idxs[i], col);
-            ColumnValueWrapper wrapper(&col);
-            agg.Add(wrapper.getFixedSizeValue<TCol>());
+            if (lowerInclusive <= tss[i] && tss[i] < upperExclusive) {
+              agg_col->Get(i, col);
+              ColumnValueWrapper wrapper(&col);
+              agg.Add(wrapper.getFixedSizeValue<TCol>());
+            }
           }
-        }
 
-        read_cache_->Release(blk_meta, kColumnNum, tmp_vid_col);
-        read_cache_->Release(blk_meta, kColumnNum + 1, tmp_ts_col);
-        read_cache_->Release(blk_meta, kColumnNum + 2, tmp_idx_col);
-        read_cache_->Release(blk_meta, colid, agg_col);
+          read_cache_->Release(blk_meta, kColumnNum, tmp_ts_col);
+          read_cache_->Release(blk_meta, colid, agg_col);
 
-        for (auto& col : need_read_from_file) {
-          auto string_col = dynamic_cast<StringArrWrapper*>(col);
-          if (UNLIKELY(string_col != nullptr)) {
-            read_cache_->ReviseCacheSize(string_col);
-          }
-        }
-        father->wakeup_once();
-      };
-      this_coroutine::coro_scheduler()->addTask(std::move(func));
+          father->wakeup_once();
+        };
+        this_coroutine::coro_scheduler()->addTask(std::move(func));
+        sub_task_num++;
+      }
     }
-    this_coroutine::co_wait(blk_metas.size());
+
+    this_coroutine::co_wait(sub_task_num);
   }
 
   std::string& col_name = engine_->columns_name_[colid];
@@ -325,6 +298,36 @@ inline void ShardImpl::aggregateImpl2(uint64_t vid, int64_t lowerInclusive, int6
   ColumnValue res_val(agg.GetResult());
   r.columns.emplace(std::make_pair(col_name, std::move(res_val)));
   res.push_back(std::move(r));
+}
+
+template <>
+inline void ShardImpl::aggAdd<MaxAggreate<double>, double>(MaxAggreate<double>* agg, int colid, BlockMeta* meta) {
+  double val = TO_DOUBLE(meta->max_val[colid]);
+  agg->Add(val);
+}
+
+template <>
+inline void ShardImpl::aggAdd<MaxAggreate<int>, int>(MaxAggreate<int>* agg, int colid, BlockMeta* meta) {
+  int val = TO_INT(meta->max_val[colid]);
+  agg->Add(val);
+}
+
+template <>
+inline void ShardImpl::aggAdd<AvgAggregate<double>, double>(AvgAggregate<double>* agg, int colid, BlockMeta* meta) {
+  double val = TO_DOUBLE(meta->sum_val[colid]);
+  for (int i = 0; i < meta->num - 1; i++) {
+    agg->Add(0);
+  }
+  agg->Add(val);
+}
+
+template <>
+inline void ShardImpl::aggAdd<AvgAggregate<int>, int>(AvgAggregate<int>* agg, int colid, BlockMeta* meta) {
+  int64_t val = TO_INT64(meta->sum_val[colid]);
+  for (int i = 0; i < meta->num - 1; i++) {
+    agg->Add(0);
+  }
+  agg->Add(val);
 }
 
 } // namespace LindormContest

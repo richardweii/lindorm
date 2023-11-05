@@ -49,7 +49,8 @@ ColumnArrWrapper* ReadCache::GetColumn(BlockMeta* meta, uint8_t colid) {
 
   RECORD_FETCH_ADD(cache_hit, 1);
   if (cache_[key]->ref == 0) {
-    lru2ref(*iter->second);
+    auto node = *iter->second;
+    lru2ref(node);
   }
   cache_[key]->ref++;
   while (cache_[key]->filling) {
@@ -81,19 +82,26 @@ void ReadCache::Release(BlockMeta* meta, uint8_t colid, ColumnArrWrapper* data) 
   *cache_[node] = node; // copy模式下修改了之后要重新设置
 };
 
-void ShardImpl::Init(bool write_phase, File* data_file) {
-  data_file_ = data_file;
-  write_phase_ = write_phase;
+void ShardImpl::Init() {
+  for (int i = 0; i < kVinNumPerShard; i++) {
+    if (write_phase) {
+      data_file_[i] = engine_->io_mgr_->OpenAsyncWriteFile(
+        VinFileName(engine_->dataDirPath, kTableName, svid2vid(shard_id_, i)), shard2tid(shard_id_));
+    } else {
+      data_file_[i] = engine_->io_mgr_->OpenAsyncReadFile(
+        VinFileName(engine_->dataDirPath, kTableName, svid2vid(shard_id_, i)), shard2tid(shard_id_));
+    }
+    block_mgr_[i] = new BlockMetaManager();
+  }
 
-  size_t read_cache_sz = write_phase_ ? kReadCacheSize / 4 : kReadCacheSize;
+  size_t read_cache_sz = write_phase ? kReadCacheSize / 8 : kReadCacheSize;
   read_cache_ = new ReadCache(read_cache_sz);
-  block_mgr_ = new BlockMetaManager();
 
-  if (write_phase_) {
-    write_buf_ = new AlignedWriteBuffer(data_file);
-    two_memtable_[0] = new MemTable(shard_id_, engine_);
-    two_memtable_[1] = new MemTable(shard_id_, engine_);
-    memtable_ = two_memtable_[memtable_id];
+  if (write_phase) {
+    for (int i = 0; i < kVinNumPerShard; i++) {
+      write_buf_[i] = new AlignedWriteBuffer(data_file_[i]);
+      memtable_[i] = new MemTable(shard_id_, engine_);
+    }
   }
 };
 
@@ -169,51 +177,43 @@ void ShardImpl::LoadLatestRowCache(File* file) {
 void ShardImpl::Write(uint16_t vid, const Row& row) {
   // LOG_DEBUG("write shard %d vid", vid);
   int svid = vid2svid(vid);
-  while (memtable_->in_flush_) { // 有可能不停的有协程在flush,所以要用while保证是可用的memtable
+  while (memtable_[svid]->in_flush_) { // 有可能不停的有协程在flush,所以要用while保证是可用的memtable
     RECORD_FETCH_ADD(write_wait_cnt, 1);
-    memtable_->cv_.wait();
+    memtable_[svid]->cv_.wait();
   }
-  if (memtable_->Write(svid, row)) {
+  if (memtable_[svid]->Write(svid, row)) {
     // flush memtable to file
-    auto rc = Flush();
+    auto rc = Flush(svid);
     LOG_ASSERT(rc == Status::OK, "flush memtable failed");
   }
 };
 
-Status ShardImpl::Flush(bool shutdown) {
-  if (memtable_ == nullptr) {
+Status ShardImpl::Flush(uint16_t svid, bool shutdown) {
+  if (memtable_[svid] == nullptr) {
     return Status::OK;
   }
-  MemTable* immutable_mmt = memtable_;
+  MemTable* immutable_mmt = memtable_[svid];
   immutable_mmt->in_flush_ = true;
-
-  memtable_id = 1 - memtable_id;
-  memtable_ = two_memtable_[memtable_id];
 
   // 如果memtable中的row是更新的，则用memtable的最新来设置缓存的latest row
   if (LIKELY(immutable_mmt->cnt_ != 0)) {
-    for (int svid = 0; svid < kVinNumPerShard; svid++) {
-      if (immutable_mmt->mem_latest_row_ts_[svid] > latest_ts_cache_[svid]) {
-        latest_ts_cache_[svid] = immutable_mmt->mem_latest_row_ts_[svid];
-        int idx = immutable_mmt->mem_latest_row_idx_[svid];
-        for (int colid = 0; colid < kColumnNum; colid++) {
-          immutable_mmt->columnArrs_[colid]->Get(idx, latest_ts_cols_[svid][colid]);
-        }
+    if (immutable_mmt->mem_latest_row_ts_ > latest_ts_cache_[svid]) {
+      latest_ts_cache_[svid] = immutable_mmt->mem_latest_row_ts_;
+      int idx = immutable_mmt->mem_latest_row_idx_;
+      for (int colid = 0; colid < kColumnNum; colid++) {
+        immutable_mmt->columnArrs_[colid]->Get(idx, latest_ts_cols_[svid][colid]);
       }
     }
 
-    BlockMeta* meta = block_mgr_->NewVinBlockMeta(immutable_mmt->cnt_, immutable_mmt->min_ts_, immutable_mmt->max_ts_);
-
-    // 先对 vid + ts idx这三列进行排序
-    immutable_mmt->sort();
+    BlockMeta* meta =
+      block_mgr_[svid]->NewVinBlockMeta(immutable_mmt->cnt_, immutable_mmt->min_ts_, immutable_mmt->max_ts_,
+                                        immutable_mmt->max_val_, immutable_mmt->sum_val_);
 
     // 刷写数据列
     for (int i = 0; i < kColumnNum; i++) {
-      immutable_mmt->columnArrs_[i]->Flush(write_buf_, immutable_mmt->cnt_, meta);
+      immutable_mmt->columnArrs_[i]->Flush(write_buf_[svid], immutable_mmt->cnt_, meta);
     }
-    immutable_mmt->svid_col_->Flush(write_buf_, immutable_mmt->cnt_, meta);
-    immutable_mmt->ts_col_->Flush(write_buf_, immutable_mmt->cnt_, meta);
-    immutable_mmt->idx_col_->Flush(write_buf_, immutable_mmt->cnt_, meta);
+    immutable_mmt->ts_col_->Flush(write_buf_[svid], immutable_mmt->cnt_, meta);
 
     immutable_mmt->cnt_ = 0;
     immutable_mmt->Reset();
@@ -221,7 +221,7 @@ Status ShardImpl::Flush(bool shutdown) {
   }
 
   if (shutdown) {
-    write_buf_->flush();
+    write_buf_[svid]->flush();
   }
 
   return Status::OK;
@@ -231,8 +231,8 @@ void ShardImpl::GetLatestRow(uint16_t vid, const std::vector<int>& colids, OUT R
   int svid = vid2svid(vid);
 
   // in the memtable
-  if (UNLIKELY(write_phase_ && memtable_->mem_latest_row_ts_[svid] > latest_ts_cache_[svid])) {
-    memtable_->GetLatestRow(svid, colids, row);
+  if (UNLIKELY(write_phase && memtable_[svid]->mem_latest_row_ts_ > latest_ts_cache_[svid])) {
+    memtable_[svid]->GetLatestRow(svid, colids, row);
     return;
   }
 
@@ -253,16 +253,17 @@ void ShardImpl::GetLatestRow(uint16_t vid, const std::vector<int>& colids, OUT R
 void ShardImpl::GetRowsFromTimeRange(uint64_t vid, int64_t lowerInclusive, int64_t upperExclusive,
                                      const std::vector<int>& colids, std::vector<Row>& results) {
   results.reserve((upperExclusive - lowerInclusive) / 1000);
-  if (UNLIKELY(write_phase_)) {
-    memtable_->GetRowsFromTimeRange(vid, lowerInclusive, upperExclusive, colids, results);
+  uint16_t svid = vid2svid(vid);
+  if (UNLIKELY(write_phase)) {
+    memtable_[svid]->GetRowsFromTimeRange(vid, lowerInclusive, upperExclusive, colids, results);
   }
 
   std::vector<BlockMeta*> blk_metas;
-  block_mgr_->GetVinBlockMetasByTimeRange(vid, lowerInclusive, upperExclusive, blk_metas);
+  block_mgr_[svid]->GetVinBlockMetasByTimeRange(vid, lowerInclusive, upperExclusive, blk_metas);
 
-  File* rfile = data_file_;
-  if (UNLIKELY(write_phase_)) {
-    std::string file_name = ShardDataFileName(engine_->dataDirPath, kTableName, shard_id_);
+  File* rfile = data_file_[svid];
+  if (UNLIKELY(write_phase)) {
+    std::string file_name = VinFileName(engine_->dataDirPath, kTableName, vid);
     rfile = new RandomAccessFile(file_name);
   }
 
@@ -270,22 +271,13 @@ void ShardImpl::GetRowsFromTimeRange(uint64_t vid, int64_t lowerInclusive, int64
     RECORD_FETCH_ADD(disk_blk_access_cnt, blk_metas.size());
     for (auto blk_meta : blk_metas) {
       auto func = [blk_meta, this, &colids, rfile, &results, vid, lowerInclusive, upperExclusive,
-                   father = this_coroutine::current()]() {
+                   father = this_coroutine::current(), svid]() {
         // 去读对应列的block
         std::vector<ColumnArrWrapper*> need_read_from_file;
-        std::vector<char*> tmp_bufs;
-        need_read_from_file.clear();
-        tmp_bufs.clear();
 
         bool hit;
-        VidArrWrapper* tmp_vid_col = read_cache_->FetchDataArr<VidArrWrapper>(blk_meta, kColumnNum, hit);
-        if (!hit) need_read_from_file.push_back(tmp_vid_col);
-
-        TsArrWrapper* tmp_ts_col = read_cache_->FetchDataArr<TsArrWrapper>(blk_meta, kColumnNum + 1, hit);
+        TsArrWrapper* tmp_ts_col = read_cache_->FetchDataArr<TsArrWrapper>(blk_meta, kColumnNum, hit);
         if (!hit) need_read_from_file.push_back(tmp_ts_col);
-
-        IdxArrWrapper* tmp_idx_col = read_cache_->FetchDataArr<IdxArrWrapper>(blk_meta, kColumnNum + 2, hit);
-        if (!hit) need_read_from_file.push_back(tmp_idx_col);
 
         ColumnArrWrapper* cols[colids.size()];
 
@@ -311,57 +303,58 @@ void ShardImpl::GetRowsFromTimeRange(uint64_t vid, int64_t lowerInclusive, int64
           icol_idx++;
         }
 
-        if (UNLIKELY(write_phase_)) {
+        if (UNLIKELY(write_phase)) {
           for (auto& col : need_read_from_file) {
             // 异步非Batch IO
-            col->Read(rfile, write_buf_, blk_meta);
+            col->Read(rfile, write_buf_[svid], blk_meta);
           }
         } else {
-          AsyncFile* async_rf = dynamic_cast<AsyncFile*>(rfile);
-          LOG_ASSERT(async_rf != nullptr, "invalid cast");
-
-          // 同时下发多个异步读IO
-          while (async_rf->avalibaleIOC() < need_read_from_file.size()) {
-            RECORD_FETCH_ADD(wait_aio, 1);
-            async_rf->waitIOC();
-          }
+          // 分成多个文件之后操作系统能创建的IO上下文不够了，这里就没法批量了
+          auto async_rfile = dynamic_cast<AsyncFile*>(rfile);
+          ENSURE(async_rfile != nullptr, "empty async_file");
           for (auto& col : need_read_from_file) {
-            // 储存用于异步IO的buf
-            tmp_bufs.push_back(col->AsyncReadCompressed(async_rf, blk_meta));
-          }
-
-          async_rf->burst();
-
-          int i = 0;
-          for (auto& col : need_read_from_file) {
-            col->Decompressed(tmp_bufs[i], blk_meta);
-            i++;
+            while (async_rfile->avalibaleIOC() <= 0) {
+              async_rfile->waitIOC();
+            }
+            auto buf = col->AsyncReadCompressed(async_rfile, blk_meta);
+            async_rfile->burst();
+            col->Decompressed(buf, blk_meta);
           }
         }
-        // 现在vid + ts是有序的，可以直接应用二分查找
-        std::vector<uint16_t> idxs;
-        std::vector<int64_t> tss;
-        findMatchingIndices(tmp_vid_col->GetDataArr(), tmp_ts_col->GetDataArr(), tmp_idx_col->GetDataArr(),
-                            blk_meta->num, vid2svid(vid), lowerInclusive, upperExclusive, idxs, tss);
 
-        if (!idxs.empty()) {
-          for (int i = 0; i < (int)idxs.size(); i++) {
+        auto tss = tmp_ts_col->GetDataArr();
+        if (lowerInclusive <= blk_meta->min_ts && blk_meta->max_ts < upperExclusive) {
+          // 完全包裹了这个block, 就不需要额外的时间戳判断，减少一个if语句
+          for (int i = 0; i < blk_meta->num; i++) {
             // build res row
             Row resultRow;
             resultRow.timestamp = tss[i];
             memcpy(resultRow.vin.vin, engine_->vid2vin_[vid].c_str(), VIN_LENGTH);
             for (size_t k = 0; k < colids.size(); k++) {
               ColumnValue col;
-              cols[k]->Get(idxs[i], col);
+              cols[k]->Get(i, col);
               resultRow.columns.insert(std::make_pair(engine_->columns_name_[cols[k]->GetColid()], std::move(col)));
             }
             results.push_back(std::move(resultRow));
           }
+        } else {
+          for (int i = 0; i < blk_meta->num; i++) {
+            // build res row
+            if (lowerInclusive <= tss[i] && tss[i] < upperExclusive) {
+              Row resultRow;
+              resultRow.timestamp = tss[i];
+              memcpy(resultRow.vin.vin, engine_->vid2vin_[vid].c_str(), VIN_LENGTH);
+              for (size_t k = 0; k < colids.size(); k++) {
+                ColumnValue col;
+                cols[k]->Get(i, col);
+                resultRow.columns.insert(std::make_pair(engine_->columns_name_[cols[k]->GetColid()], std::move(col)));
+              }
+              results.push_back(std::move(resultRow));
+            }
+          }
         }
 
-        read_cache_->Release(blk_meta, kColumnNum, tmp_vid_col);
-        read_cache_->Release(blk_meta, kColumnNum + 1, tmp_ts_col);
-        read_cache_->Release(blk_meta, kColumnNum + 2, tmp_idx_col);
+        read_cache_->Release(blk_meta, kColumnNum, tmp_ts_col);
         for (size_t i = 0; i < colids.size(); i++) {
           read_cache_->Release(blk_meta, colids[i], cols[i]);
         }
@@ -379,29 +372,30 @@ void ShardImpl::GetRowsFromTimeRange(uint64_t vid, int64_t lowerInclusive, int64
     this_coroutine::co_wait(blk_metas.size());
   }
 
-  if (UNLIKELY(write_phase_)) {
+  if (UNLIKELY(write_phase)) {
     delete rfile;
   }
 };
 
 ShardImpl::~ShardImpl() {
-  delete two_memtable_[0];
-  delete two_memtable_[1];
   delete read_cache_;
-  delete write_buf_;
-  delete block_mgr_;
+  for (int i = 0; i < kVinNumPerShard; i++) {
+    delete write_buf_[i];
+    delete memtable_[i];
+    delete block_mgr_[i];
+  }
 };
 
 void ShardImpl::InitMemTable() {
-  LOG_ASSERT(memtable_ != nullptr, "invalid memtable nullptr.");
-  two_memtable_[0]->Init();
-  two_memtable_[1]->Init();
+  for (int i = 0; i < kVinNumPerShard; i++) {
+    memtable_[i]->Init();
+  }
 };
 
 // TODO: 改成time range 过程中就计算，减少对row的构建
 void ShardImpl::AggregateQuery(uint64_t vid, int64_t lowerInclusive, int64_t upperExclusive, int colid, Aggregator op,
                                std::vector<Row>& res) {
-  if (UNLIKELY(write_phase_)) {
+  if (UNLIKELY(write_phase)) {
     std::vector<Row> tmp_res;
     GetRowsFromTimeRange(vid, lowerInclusive, upperExclusive, {colid}, tmp_res);
     // 空范围

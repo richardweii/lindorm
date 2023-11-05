@@ -22,7 +22,9 @@ Scheduler* coro_scheduler();
 
 class Scheduler : public Coroutine {
   static constexpr size_t kTaskBufLen = 128;
-
+  static constexpr int kPollingCnt = 8;
+  static constexpr int kYieldCnt = 32;
+  static constexpr int kIDLECnt = 4;
 public:
   explicit Scheduler(int coroutine_num, int tid);
   ~Scheduler();

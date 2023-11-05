@@ -58,7 +58,7 @@ static int createTable(LindormContest::TSDBEngine* engine) {
 }
 
 static constexpr int kVinNum = LindormContest::kVinNum;
-static constexpr int kRowsPerVin = 100 * 60;
+static constexpr int kRowsPerVin = 10 * 60;
 
 static bool RowEquals(const LindormContest::Row& a, const LindormContest::Row& b) {
   if (a != b) return false;
@@ -180,7 +180,7 @@ void parallel_upsert(LindormContest::TSDBEngine* engine) {
           for (int i = th * per_thread_vin_num; i < (th + 1) * per_thread_vin_num && i < kVinNum;) {
             LindormContest::WriteRequest wReq;
             wReq.tableName = "t1";
-            for (int k = 0; i < (th + 1) * per_thread_vin_num && k < 20; k++, i++) {
+            for (int k = 0; i < (th + 1) * per_thread_vin_num && k < 20 && i < kVinNum; k++, i++) {
               wReq.rows.push_back(get_row(is[i], js[j]));
             }
             int ret = engine->write(wReq);
@@ -547,7 +547,12 @@ int main(int argc, char** argv) {
       auto now2 = TIME_NOW;
       LOG_INFO("============== [RESLUT] ================ Write Use :%ld ms", TIME_DURATION_US(now, now2) / 1000);
     }
-
+    {
+      auto now = TIME_NOW;
+      parallel_test_time_range(engine);
+      auto now2 = TIME_NOW;
+      LOG_INFO("============== [RESLUT] ================ parallel_test_time_range Use :%ld ms", TIME_DURATION_US(now, now2) / 1000);
+    }
     LOG_INFO("start shutdown...");
     engine->shutdown();
     delete engine;

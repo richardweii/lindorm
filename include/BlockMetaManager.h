@@ -15,24 +15,16 @@ namespace LindormContest {
 struct BlockMeta {
   BlockMeta* next;
   int num; // 一共写了多少行数据
-  int64_t min_ts[kVinNumPerShard];
-  int64_t max_ts[kVinNumPerShard];
+  int64_t min_ts;
+  int64_t max_ts;
+
+  uint64_t max_val[kColumnNum];
+  uint64_t sum_val[kColumnNum];
+
   // 每一列对应的块的元数据
-  uint64_t* compress_sz;
-  uint64_t* origin_sz;
-  uint64_t* offset;
-
-  BlockMeta() {
-    compress_sz = new uint64_t[kColumnNum + kExtraColNum];
-    origin_sz = new uint64_t[kColumnNum + kExtraColNum];
-    offset = new uint64_t[kColumnNum + kExtraColNum];
-  }
-
-  ~BlockMeta() {
-    delete[] compress_sz;
-    delete[] origin_sz;
-    delete[] offset;
-  }
+  uint64_t compress_sz[kColumnNum + kExtraColNum];
+  uint64_t origin_sz[kColumnNum + kExtraColNum];
+  uint64_t offset[kColumnNum + kExtraColNum];
 };
 
 /**
@@ -41,13 +33,15 @@ struct BlockMeta {
 // TODO: 重构，把kShardNum 去掉
 class BlockMetaManager {
 public:
-  BlockMeta* NewVinBlockMeta(int num, int64_t* min_ts, int64_t* max_ts) {
+  BlockMeta* NewVinBlockMeta(int num, int64_t min_ts, int64_t max_ts, uint64_t max_val[kColumnNum], uint64_t sum_val[kColumnNum]) {
     BlockMeta* blk_meta = new BlockMeta();
     LOG_ASSERT(blk_meta != nullptr, "blk_meta == nullptr");
     blk_meta->num = num;
-    for (int i = 0; i < kVinNumPerShard; i++) {
-      blk_meta->min_ts[i] = min_ts[i];
-      blk_meta->max_ts[i] = max_ts[i];
+    blk_meta->min_ts = min_ts;
+    blk_meta->max_ts = max_ts;
+    for (int i = 0; i < kColumnNum; i++) {
+      blk_meta->max_val[i] = max_val[i];
+      blk_meta->sum_val[i] = sum_val[i];
     }
 
     blk_meta->next = nullptr;
@@ -72,7 +66,7 @@ public:
     BlockMeta* p = head_;
     int svid = vid2svid(vid);
     while (p != nullptr) {
-      if (p->max_ts[svid] < min_ts || p->min_ts[svid] >= max_ts) {
+      if (p->max_ts < min_ts || p->min_ts >= max_ts) {
         p = p->next;
         continue;
       }
@@ -98,15 +92,19 @@ public:
       // row num
       file->write((const char*)&p->num, sizeof(p->num));
       // min_ts[]
-      file->write((const char*)p->min_ts, sizeof(p->min_ts[0]) * kVinNumPerShard);
+      file->write((const char*)&p->min_ts, sizeof(p->min_ts));
       // max_ts
-      file->write((const char*)p->max_ts, sizeof(p->max_ts[0]) * kVinNumPerShard);
+      file->write((const char*)&p->max_ts, sizeof(p->max_ts));
+            // min_ts[]
+      file->write((const char*)p->max_val, sizeof(p->max_val));
+      // max_ts
+      file->write((const char*)p->sum_val, sizeof(p->sum_val));
       // compress_sz
-      file->write((const char*)p->compress_sz, sizeof(p->compress_sz[0]) * (kColumnNum + kExtraColNum));
+      file->write((const char*)p->compress_sz, sizeof(p->compress_sz));
       // origin_sz
-      file->write((const char*)p->origin_sz, sizeof(p->origin_sz[0]) * (kColumnNum + kExtraColNum));
+      file->write((const char*)p->origin_sz, sizeof(p->origin_sz));
       // offset
-      file->write((const char*)p->offset, sizeof(p->offset[0]) * (kColumnNum + kExtraColNum));
+      file->write((const char*)p->offset, sizeof(p->offset));
       p = p->next;
     }
     LOG_ASSERT(p == nullptr, "p should be equal nullptr");
@@ -124,17 +122,21 @@ public:
     LOG_ASSERT(head_ == nullptr, "head should be nullptr");
     for (int i = 0; i < blk_cnt; i++) {
       int num;
-      int64_t min_ts[kVinNumPerShard];
-      int64_t max_ts[kVinNumPerShard];
+      int64_t min_ts;
+      int64_t max_ts;
+      uint64_t max_val[kColumnNum];
+      uint64_t sum_val[kColumnNum];
       file->read((char*)&num, sizeof(num));
-      file->read((char*)min_ts, sizeof(min_ts[0]) * kVinNumPerShard);
-      file->read((char*)max_ts, sizeof(max_ts[0]) * kVinNumPerShard);
+      file->read((char*)&min_ts, sizeof(min_ts));
+      file->read((char*)&max_ts, sizeof(max_ts));
+      file->read((char*)max_val, sizeof(max_val));
+      file->read((char*)sum_val, sizeof(sum_val));
 
-      auto* p = NewVinBlockMeta(num, min_ts, max_ts);
+      auto* p = NewVinBlockMeta(num, min_ts, max_ts, max_val, sum_val);
 
-      file->read((char*)p->compress_sz, sizeof(p->compress_sz[0]) * (kColumnNum + kExtraColNum));
-      file->read((char*)p->origin_sz, sizeof(p->origin_sz[0]) * (kColumnNum + kExtraColNum));
-      file->read((char*)p->offset, sizeof(p->offset[0]) * (kColumnNum + kExtraColNum));
+      file->read((char*)p->compress_sz, sizeof(p->compress_sz));
+      file->read((char*)p->origin_sz, sizeof(p->origin_sz));
+      file->read((char*)p->offset, sizeof(p->offset));
     }
   }
 

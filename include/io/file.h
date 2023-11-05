@@ -159,7 +159,7 @@ public:
 
 class AsyncFile : public File {
 public:
-  static constexpr int kMaxIONum = 256;
+  static constexpr int kMaxIONum = 8;
   struct IOContext {
     Coroutine* coro;
     AsyncFile* file;

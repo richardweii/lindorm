@@ -91,14 +91,8 @@ int TSDBEngineImpl::connect() {
   }
   coro_pool_ = new CoroutinePool(kWorkerThread, kCoroutinePerThread);
   // 初始化shard
-  File* shard_file = nullptr;
   for (int i = 0; i < kShardNum; i++) {
-    if (write_phase) {
-      shard_file = io_mgr_->OpenAsyncWriteFile(ShardDataFileName(dataDirPath, kTableName, i), shard2tid(i));
-    } else {
-      shard_file = io_mgr_->OpenAsyncReadFile(ShardDataFileName(dataDirPath, kTableName, i), shard2tid(i));
-    }
-    shards_[i]->Init(write_phase, shard_file);
+    shards_[i]->Init();
   }
 
   // load vin2vid
@@ -210,7 +204,9 @@ int TSDBEngineImpl::shutdown() {
   for (int i = 0; i < kShardNum; i++) {
     coro_pool_->enqueue(
       [&wg, this, i]() {
-        shards_[i]->Flush(true);
+        for (int svid = 0 ; svid < kVinNumPerShard; svid++) {
+          shards_[i]->Flush(svid, true);
+        }
         wg.Done();
       },
       shard2tid(i));
@@ -428,7 +424,7 @@ int TSDBEngineImpl::executeAggregateQuery(const TimeRangeAggregationRequest& agg
 
 #ifdef ENABLE_STAT
   int a = agg_query_cnt.load();
-  if (a > 10000 && a <= 10010) {
+  if (a > 10000 && a <= 10050) {
     printf("TimeRangeAggregationRequest :VID %d [%ld, %ld) ", vid, aggregationReq.timeLowerBound,
            aggregationReq.timeUpperBound);
     printf("[%s] ", aggregationReq.columnName.c_str());
@@ -468,7 +464,7 @@ int TSDBEngineImpl::executeDownsampleQuery(const TimeRangeDownsampleRequest& dow
 
 #ifdef ENABLE_STAT
   int a = downsample_query_cnt.load();
-  if (a > 200000 && a <= 200010) {
+  if (a > 200000 && a <= 200050) {
     printf("TimeRangeDownsampleRequest :VID %d [%ld, %ld), interval %ld ", vid, downsampleReq.timeLowerBound,
            downsampleReq.timeUpperBound, downsampleReq.interval);
     printf("[%s] ", downsampleReq.columnName.c_str());

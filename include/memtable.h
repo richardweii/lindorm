@@ -19,7 +19,9 @@
 #include "util/rwlock.h"
 
 namespace LindormContest {
-
+#define TO_INT(a) *((int*)(&a))
+#define TO_DOUBLE(a) *((double*)(&a))
+#define TO_INT64(a) *((int64_t*)(&a))
 class MemTable {
   friend class ShardImpl;
 
@@ -33,7 +35,7 @@ public:
     }
 
     delete[] columnArrs_;
-    delete svid_col_;
+    // delete svid_col_;
     delete ts_col_;
   }
 
@@ -57,12 +59,12 @@ private:
   friend class BlockMetaManager;
 
   void updateTs(const int64_t ts, uint16_t svid) {
-    if (ts < min_ts_[svid]) {
-      min_ts_[svid] = ts;
+    if (ts < min_ts_) {
+      min_ts_ = ts;
     }
 
-    if (ts > max_ts_[svid]) {
-      max_ts_[svid] = ts;
+    if (ts > max_ts_) {
+      max_ts_ = ts;
     }
   }
 
@@ -70,24 +72,25 @@ private:
     return ts >= lowerInclusive && ts < upperExclusive;
   }
 
-  void sort();
-
   TSDBEngineImpl* engine_;
   int shard_id_;
 
   // std::string *engine->columnsName; // The column's name for each column.
   ColumnArrWrapper** columnArrs_;
-  VidArrWrapper* svid_col_;
+  // VidArrWrapper* svid_col_;
   TsArrWrapper* ts_col_;
-  IdxArrWrapper* idx_col_;
+  // IdxArrWrapper* idx_col_;
 
   int cnt_; // 记录这个memtable写了多少行了，由于可能没有写满，然后shutdown刷下去了，所以需要记录一下
-  int64_t min_ts_[kVinNumPerShard];
-  int64_t max_ts_[kVinNumPerShard];
+  int64_t min_ts_;
+  int64_t max_ts_;
+
+  uint64_t max_val_[kColumnNum];
+  uint64_t sum_val_[kColumnNum];
 
   // mem latest row idx and ts
-  int64_t mem_latest_row_idx_[kVinNumPerShard];
-  int64_t mem_latest_row_ts_[kVinNumPerShard];
+  int64_t mem_latest_row_idx_;
+  int64_t mem_latest_row_ts_;
 
   volatile bool in_flush_{false};
 

@@ -27,47 +27,61 @@ Scheduler::~Scheduler() { delete[] wakeup_buf_; }
 
 void Scheduler::scheduling() {
   // 绑核
-  // cpu_set_t cpuset;
-  // CPU_ZERO(&cpuset);
-  // CPU_SET(tid_, &cpuset);
-  // pthread_setaffinity_np(pthread_self(), sizeof(cpu_set_t), &cpuset);
+  cpu_set_t cpuset;
+  CPU_ZERO(&cpuset);
+  CPU_SET(tid_, &cpuset);
+  pthread_setaffinity_np(pthread_self(), sizeof(cpu_set_t), &cpuset);
+  
+  char tmp[20];
+  ::sprintf(tmp, "scheduler_%d", tid_);
+  pthread_setname_np(pthread_self(), tmp);
 
   scheduler = this;
-  int idle_time = 0;
-  int sleep_time = 10;
+  int idle_cnt = 0;
+  int yield_cnt = 0;
+  int polling_cnt = 0;
   // auto start = TIME_NOW;
   while (!(stop && runnable_list_.empty() && waiting_list_.empty())) {
+    polling_cnt++;
+    // 只对写阶段做定期sleep给前台让核
     if (LindormContest::write_phase) {
-      sleep_time--;
-      if (sleep_time == 0) {
+      yield_cnt--;
+      if (yield_cnt == 0) {
         std::this_thread::sleep_for(std::chrono::microseconds(100));
-        sleep_time = 32;
+        yield_cnt = kYieldCnt;
       }
     }
+
     // auto cur = TIME_NOW;
-    // if (UNLIKELY(TIME_DURATION_US(start, cur) > 5000 * 1000)) {
+    // if (UNLIKELY(TIME_DURATION_US(start, cur) > 10000 * 1000)) {
     //   start = cur;
     //   LOG_DEBUG("[tid : %d ] runnable: %ld, waiting: %ld, idle: %ld. task_num %d", tid_, runnable_list_.size(),
     //             waiting_list_.size(), idle_list_.size(), task_num_.load());
     // }
-    if (UNLIKELY(runnable_list_.empty())) {
+
+    if (UNLIKELY(polling_cnt == kPollingCnt)) {
       // do none-block polling work
+      polling_cnt = 0;
       if (LIKELY(polling_ != nullptr)) {
         polling_();
-        wakeup();
       }
     }
+
+    wakeup();
+
     if (!idle_list_.empty()) {
       dispatch();
     }
+
     if (UNLIKELY(runnable_list_.empty())) {
       std::this_thread::yield();
-      if (LindormContest::write_phase && idle_time++ >= 5) {
-        std::this_thread::sleep_for(std::chrono::milliseconds(1));
+      if (LindormContest::write_phase && idle_cnt++ >= kIDLECnt) {
+        std::this_thread::sleep_for(std::chrono::microseconds(1000));
+        idle_cnt = 0;
       }
       continue;
     }
-    idle_time = 0;
+    idle_cnt = 0;
     current_ = runnable_list_.front();
     runnable_list_.pop_front();
     current_->resume();
