@@ -1,6 +1,7 @@
 #pragma once
 
 #include <malloc.h>
+#include <algorithm>
 #include <cassert>
 #include <cstdint>
 #include <cstdio>
@@ -326,38 +327,36 @@ inline int StringArrDeCompress(char* origin_buf, int origin_sz, char* compress_d
 //                     dst_compress_buf_sz, origin_sz-sizeof(uint16_t)*cnt) + sizeof(uint16_t) * cnt;
 // }
 
-// int calculateSep(double min, double max) {
-//   std::cout << std::abs(ceil(max)) << std::endl;
-
-//   auto exp = log2(std::abs(ceil(max)));
-
-//   std::cout << exp << std::endl;
-
-//   // return exp - ceil(log2(max - min));
-//   return log2(std::abs(ceil(max))) -  ceil(log2(max - min)) + 1 + 11;
-// }
+inline int calculateSep(double min, double max) {
+  auto exp = log2(std::abs(ceil(max))) - 1;
+  return exp - ceil(log2(max - min)) + 1 + 11;
+}
 
 /**
  * double分成三段，第一段是公共前缀部分，第二段
  */
 inline int DoubleArrCompress(double double_arr[], int cnt, double min, double max,
                               OUT char* &buf, OUT uint64_t& compress_sz) {
-  int high_bits = 24; // 后面通过策略控制，目前暂定24比特
-  int high_mask = 0xFFFFFF;
+  int high_bits = calculateSep(min, max); // 后面通过策略控制，目前暂定24比特
+  high_bits = (high_bits + 7) & ~7;
+  high_bits = std::min(32, high_bits);
+  uint64_t high_mask = (1ULL << high_bits) - 1ULL;
   int high[cnt];
   int high_min;
   int high_max;
 
-  int low_bytes = 5;
+  int low_bits = 64-high_bits;
+  int low_bytes = low_bits / 8;
   uint64_t buf_low_sz = low_bytes * cnt;
-  uint64_t buf_sz = 8 * cnt + 8; // 一次性分配好，后面压缩的直接追加在后面就好了
+  int skip = 12;
+  uint64_t buf_sz = 8 * cnt + skip; // 一次性分配好，后面压缩的直接追加在后面就好了
   int diff_cnt = 1;
   buf = reinterpret_cast<char*>(naive_alloc(buf_sz));
   for (int i = 0; i < cnt; i++) {
     // 提取double的高位比特
     uint64_t binaryRepresentation = *reinterpret_cast<uint64_t*>(&double_arr[i]);
     high[i] = (binaryRepresentation >> (64-high_bits)) & high_mask;
-    memcpy(buf + low_bytes * i + 8, &double_arr[i], low_bytes);
+    memcpy(buf + low_bytes * i + skip, &double_arr[i], low_bytes);
     if (i == 0) {
       diff_cnt = 1;
       high_min = high[i];
@@ -372,11 +371,12 @@ inline int DoubleArrCompress(double double_arr[], int cnt, double min, double ma
   char* buf_high;
   uint64_t high_compress_size;
   TArrCompress(high, cnt, high_min, high_max, diff_cnt, buf_high, high_compress_size, MyColumnType::MyInt32);
-  memcpy(buf + buf_low_sz + 8, buf_high, high_compress_size);
-  compress_sz = buf_low_sz + high_compress_size + 8;
+  memcpy(buf + buf_low_sz + skip, buf_high, high_compress_size);
+  compress_sz = buf_low_sz + high_compress_size + skip;
 
   *reinterpret_cast<int*>(buf) = buf_low_sz;
   *reinterpret_cast<int*>(buf+4) = high_compress_size;
+  *reinterpret_cast<int*>(buf+8) = high_bits; 
 
   naive_free(buf_high);
 
@@ -384,17 +384,18 @@ inline int DoubleArrCompress(double double_arr[], int cnt, double min, double ma
 }
 
 inline int DoubleArrDeCompress(OUT double double_arr[], int& cnt, int origin_size, char* compress_buf, uint64_t compress_sz) {
+  int skip = 12;
   uint64_t buf_low_size = *reinterpret_cast<int*>(compress_buf);
   uint64_t high_compress_size = *reinterpret_cast<int*>(compress_buf + 4);
-  int high_bits = 24; // 后面通过策略控制，目前暂定24比特
-  int high_mask = 0xFFFFFF;
-  int low_bytes = 5;
+  int high_bits = *reinterpret_cast<int*>(compress_buf + 8);
+  uint64_t high_mask = (1ULL << high_bits) - 1ULL;
+  int low_bytes = (64-high_bits) / 8;
   cnt = buf_low_size / low_bytes;
   int high[cnt];
-  LOG_ASSERT(compress_sz == buf_low_size + high_compress_size + 8, "error");
+  LOG_ASSERT(compress_sz == buf_low_size + high_compress_size + skip, "error");
 
   int high_cnt;
-  TArrDeCompress(high, high_cnt, sizeof(int) * cnt, compress_buf + 8 + buf_low_size, high_compress_size, MyColumnType::MyInt32);
+  TArrDeCompress(high, high_cnt, sizeof(int) * cnt, compress_buf + skip + buf_low_size, high_compress_size, MyColumnType::MyInt32);
   LOG_ASSERT(high_cnt == cnt, "high_cnt %d cnt %d", high_cnt, cnt);
 
   for (int i = 0; i < cnt; i++) {
@@ -402,7 +403,7 @@ inline int DoubleArrDeCompress(OUT double double_arr[], int& cnt, int origin_siz
     uint64_t res_high = (hhh << (64-high_bits));
     uint64_t res_low = 0;
     uint64_t res = 0;
-    memcpy(&res_low, compress_buf + low_bytes * i + 8, low_bytes);
+    memcpy(&res_low, compress_buf + low_bytes * i + skip, low_bytes);
     res = res_high | res_low;
     *reinterpret_cast<uint64_t*>(&double_arr[i]) = res;
   }
