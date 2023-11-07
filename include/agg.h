@@ -93,6 +93,7 @@ private:
 };
 
 template class AvgAggregate<int>;
+template class AvgAggregate<int64_t>;
 template class AvgAggregate<double>;
 
 template <>

@@ -433,7 +433,7 @@ void ShardImpl::AggregateQuery(uint64_t vid, int64_t lowerInclusive, int64_t upp
     ColumnType t = engine_->columns_type_[colid];
     if (op == AVG) {
       if (t == COLUMN_TYPE_INTEGER) {
-        aggregateImpl2<AvgAggregate<int>, int>(vid, lowerInclusive, upperExclusive, colid, res);
+        aggregateImpl2<AvgAggregate<int64_t>, int64_t>(vid, lowerInclusive, upperExclusive, colid, res);
       } else if (t == COLUMN_TYPE_DOUBLE_FLOAT) {
         aggregateImpl2<AvgAggregate<double>, double>(vid, lowerInclusive, upperExclusive, colid, res);
       } else {

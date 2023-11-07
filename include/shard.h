@@ -321,7 +321,7 @@ inline void ShardImpl::aggAdd<AvgAggregate<double>, double>(AvgAggregate<double>
 }
 
 template <>
-inline void ShardImpl::aggAdd<AvgAggregate<int>, int>(AvgAggregate<int>* agg, int colid, BlockMeta* meta) {
+inline void ShardImpl::aggAdd<AvgAggregate<int64_t>, int64_t>(AvgAggregate<int64_t>* agg, int colid, BlockMeta* meta) {
   int64_t val = TO_INT64(meta->sum_val[colid]);
   for (int i = 0; i < meta->num - 1; i++) {
     agg->Add(0);
