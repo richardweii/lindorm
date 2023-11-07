@@ -286,11 +286,6 @@ int TSDBEngineImpl::write(const WriteRequest& writeRequest) {
   std::vector<std::vector<Row>> rows(kWorkerThread);
   for (auto& row : writeRequest.rows) {
     uint16_t vid = getVidForWrite(row.vin);
-#ifdef ENABLE_STAT
-    // if (print_row_cnt.fetch_add(1) <= 100) {
-    //   print_row(row, vid);
-    // }
-#endif
     int shard = sharding(vid);
     int tid = shard2tid(shard);
     rows[tid].emplace_back(std::move(row));

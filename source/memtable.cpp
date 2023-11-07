@@ -85,6 +85,13 @@ void MemTable::GetRowsFromTimeRange(uint64_t vid, int64_t lowerInclusive, int64_
 }
 
 bool MemTable::Write(uint16_t svid, const Row& row) {
+#ifdef ENABLE_STAT
+  if (svid2vid(shard_id_, svid) == 0x111) {
+    if (print_row_cnt.fetch_add(1) <= 100) {
+      print_row(row, svid2vid(shard_id_, svid));
+    }
+  }
+#endif
   //  更新本memtable中的最新row信息
   if (mem_latest_row_ts_ < row.timestamp) {
     mem_latest_row_ts_ = row.timestamp;
