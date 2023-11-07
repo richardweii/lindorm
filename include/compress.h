@@ -24,10 +24,13 @@ enum class CompressType {
   ALL_EQUALS, // int值全部相同
   DIFFERENCE, // int差分
   ZSTD, // 走zstd
+  HIGH,
 };
 
 int TsDiffCompress(int64_t ts_arr[], int cnt, int64_t min, int64_t max, char* &buf, uint64_t &compress_size);
 int TsDiffDeCompress(int64_t ts_arr[], int &cnt, char* buf, uint64_t compress_size);
+int HighBitCompress(int int_arr[], int cnt, int min, int max, char* &buf, uint64_t &compress_size);
+int HighBitDeCompress(OUT int int_arr[], int& cnt, int origin_size, char* compress_buf, uint64_t compress_sz);
 
 inline int ZSTDMaxDestSize(int inputSize) { return ZSTD_compressBound(inputSize); }
 
@@ -417,6 +420,7 @@ int TArrCompress(T t_arr[], int cnt, T min, T max, int diff_cnt, OUT char* &comp
   if (col_type == MyColumnType::MyInt32 || col_type == MyColumnType::MyUInt16) {
     if (AllEqualCompress(t_arr, cnt, min, max, compress_buf, size) == 0) {
     } else if (DiffCompress(t_arr, cnt, diff_cnt, compress_buf, size) == 0) {
+    } else if (HighBitCompress((int*)t_arr, cnt, min, max, compress_buf, size) == 0) {
     } else {
       // zstd 兜底
       uint64_t compress_buf_sz = ZSTDMaxDestSize(sizeof(T) * cnt) + 1; // +1是因为头部需要额外存一个字节的type
@@ -457,6 +461,8 @@ int TArrDeCompress(OUT T t_arr[], OUT int &cnt, int origin_sz, char* compress_bu
       AllEqualDeCompress(t_arr, cnt, compress_buf, compress_size);
     } else if (compress_type == (char)CompressType::DIFFERENCE) {
       DiffDeCompress(t_arr, cnt, compress_buf, compress_size);
+    } else if (compress_type == (char)CompressType::HIGH) {
+      HighBitDeCompress((int*)t_arr, cnt, origin_sz, compress_buf, compress_size);
     } else {
       LOG_ASSERT(compress_buf[0] == 2, "no zstd");
       // zstd decompress

@@ -42,6 +42,7 @@ std::atomic<int64_t> all_equal_compress_cnt{0};
 std::atomic<int64_t> int_diff_compress_cnt{0};
 std::atomic<int64_t> ts_diff_compress_cnt{0};
 std::atomic<int64_t> zstd_compress_cnt{0};
+std::atomic<int64_t> high_compress_cnt{0};
 
 std::string types[] = {
   "NULL",
@@ -74,11 +75,11 @@ void print_performance_statistic() {
     "%ld\n====================ReadCache Hit: %ld, MISS: "
     "%ld, HitRate: %lf\n====================ReadCache data wait :%ld, lru wait %ld\n====================Alloc time: "
     "%ld\n====================wait aio :%ld\n===================disk_blk_access_cnt :%ld"
-    "===================all_equal_compress :%ld, int_diff_compress: %ld, zstd_compress: %ld",
+    "\n===================all_equal_compress :%ld, int_diff_compress: %ld, zstd_compress: %ld, high_compress: %ld",
     latest_query_cnt.load(), time_range_query_cnt.load(), agg_query_cnt.load(), downsample_query_cnt.load(),
     cache_hit.load(), cache_cnt.load() - cache_hit.load(), cache_hit.load() * 1.0 / cache_cnt.load(),
     data_wait_cnt.load(), lru_wait_cnt.load(), alloc_time.load(), wait_aio.load(), disk_blk_access_cnt.load(), 
-    all_equal_compress_cnt.load(), int_diff_compress_cnt.load(), zstd_compress_cnt.load());
+    all_equal_compress_cnt.load(), int_diff_compress_cnt.load(), zstd_compress_cnt.load(), high_compress_cnt.load());
   LOG_INFO("*******************************************");
   fflush(stdout);
 }

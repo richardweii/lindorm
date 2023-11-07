@@ -81,7 +81,21 @@ int calculateSep(double min, double max) {
   return exp - ceil(log2(max - min));
 }
 
+
+static int FindCommonPrefix(int num1, int num2) {
+  int ret = 1;
+  while (ret <= 32) {
+    if (((num1 >> (32-ret)) & 1) != ((num2 >>(32-ret))&1)) break;
+    ret++;
+  }
+
+  return ret - 1;
+}
+
+
 int main() {
+  int comm = FindCommonPrefix(995292, 620748);
+  printf("comm %d\n", comm);
   // int high_bits = 25;
   // high_bits = (high_bits + 7) & ~7;
   // printf("%d\n", high_bits);
@@ -104,37 +118,33 @@ int main() {
   // printf("... %d\n", calculateSep(26830.738424, 26835.432412));
   // int a = CalculateBitsRequired(0, 7);
   // printf("%d\n", a);
-  // int arr[ARR_NUM];
-  // srandom(time(NULL));
-  // int min = INT32_MAX;
-  // int max = INT32_MIN;
-  // for (int i = 0; i < ARR_NUM; i++) {
-  //   arr[i] = i;
-  //   if (i > 100 && i < 150) arr[i] = -i - LindormContest::MAX_DIFF_VAL - 1;
-  //   if (i >= 150) arr[i] = i + LindormContest::MAX_DIFF_VAL + 1 + LindormContest::MAX_DIFF_VAL + 1;
-  //   arr[i] += rand() % 100;
-  //   if (arr[i] < min) min = arr[i];
-  //   if (arr[i] > max) max = arr[i];
-  //   if (i == ARR_NUM - 1) arr[i] = 234124123;
-  // }
+  int arr[ARR_NUM];
+  srandom(time(NULL));
+  int min = INT32_MAX;
+  int max = INT32_MIN;
+  for (int i = 0; i < ARR_NUM; i++) {
+    arr[i] = 801234 + rand() % 100000;
+    if (min > arr[i]) min = arr[i];
+    if (max < arr[i]) max = arr[i];
+  }
 
-  // int origin_sz = sizeof(int) * ARR_NUM;
-  // char* compress_buf;
-  // uint64_t compress_size;
-  // LindormContest::TArrCompress(arr, ARR_NUM, min, max, 4, compress_buf, compress_size, LindormContest::MyColumnType::MyInt32);
-  // LOG_INFO("my compress ratoo %f\n", compress_size * 1.0 / origin_sz);
-  // char buf[origin_sz];
-  // int zstd_size = LindormContest::ZSTDCompress((const char *)arr, origin_sz, buf, origin_sz);
-  // LOG_INFO("zstd compress ratoo %f\n", zstd_size * 1.0 / origin_sz);
+  int origin_sz = sizeof(int) * ARR_NUM;
+  char* compress_buf;
+  uint64_t compress_size;
+  LindormContest::HighBitCompress(arr, ARR_NUM, min, max, compress_buf, compress_size);
+  LOG_INFO("my compress ratoo %f\n", compress_size * 1.0 / origin_sz);
+  char buf[origin_sz];
+  int zstd_size = LindormContest::ZSTDCompress((const char *)arr, origin_sz, buf, origin_sz);
+  LOG_INFO("zstd compress ratoo %f\n", zstd_size * 1.0 / origin_sz);
 
 
-  // int arr2[ARR_NUM];
-  // int cnt;
-  // LindormContest::TArrDeCompress(arr2, cnt, sizeof(int)*ARR_NUM, compress_buf, compress_size, LindormContest::MyColumnType::MyInt32);
-  // LOG_ASSERT(cnt == ARR_NUM, "cnt = %d", cnt);
-  // for (int i = 0; i < cnt; i++) {
-  //   LOG_ASSERT(arr[i] == arr2[i], "i %d expect %d, but got %d", i, arr[i], arr2[i]);
-  // }
+  int arr2[ARR_NUM];
+  int cnt;
+  LindormContest::HighBitDeCompress(arr2, cnt, sizeof(int)*ARR_NUM, compress_buf, compress_size);
+  LOG_ASSERT(cnt == ARR_NUM, "cnt = %d", cnt);
+  for (int i = 0; i < cnt; i++) {
+    LOG_ASSERT(arr[i] == arr2[i], "i %d expect %d, but got %d", i, arr[i], arr2[i]);
+  }
   // char* compress_buf;
   // int cnt;
   // uint64_t compress_size;
@@ -160,34 +170,34 @@ int main() {
   //   printDoubleBinary(d);
   // }
 
-  double double_arr[ARR_NUM];
-  double min;
-  double max;
-  srandom(time(NULL));
-  for (int i = 0; i < ARR_NUM; i++) {
-    double_arr[i] = 231223 + rand() % 100 + ((rand() % 10000000000)*1.0 + 10000000000) / 10000000000;
-    if (i == 0) {
-      min = double_arr[i];
-      max = double_arr[i];
-    } else {
-      if (min > double_arr[i]) min = double_arr[i];
-      if (max < double_arr[i]) max = double_arr[i];
-    }
-  }
+  // double double_arr[ARR_NUM];
+  // double min;
+  // double max;
+  // srandom(time(NULL));
+  // for (int i = 0; i < ARR_NUM; i++) {
+  //   double_arr[i] = -878407 - rand() % 100 + ((rand() % 10000000000)*1.0 + 10000000000) / 10000000000;
+  //   if (i == 0) {
+  //     min = double_arr[i];
+  //     max = double_arr[i];
+  //   } else {
+  //     if (min > double_arr[i]) min = double_arr[i];
+  //     if (max < double_arr[i]) max = double_arr[i];
+  //   }
+  // }
 
-  int origin_sz = sizeof(double) * ARR_NUM;
-  char* compress_buf;
-  uint64_t compress_size;
-  LindormContest::DoubleArrCompress(double_arr, ARR_NUM, min, max, compress_buf, compress_size);
-  LOG_INFO("my compress ratio %f\n", compress_size * 1.0 / origin_sz);
+  // int origin_sz = sizeof(double) * ARR_NUM;
+  // char* compress_buf;
+  // uint64_t compress_size;
+  // LindormContest::DoubleArrCompress(double_arr, ARR_NUM, min, max, compress_buf, compress_size);
+  // LOG_INFO("my compress ratio %f\n", compress_size * 1.0 / origin_sz);
 
-  double arr2[ARR_NUM];
-  int cnt;
-  LindormContest::DoubleArrDeCompress(arr2, cnt, origin_sz, compress_buf, compress_size);
-  LOG_ASSERT(cnt == ARR_NUM, "cnt %d", cnt);
-  for (int i = 0; i < ARR_NUM; i++) {
-    LOG_ASSERT(double_arr[i] == arr2[i], "%f <--> %f", double_arr[i], arr2[i]);
-  }
+  // double arr2[ARR_NUM];
+  // int cnt;
+  // LindormContest::DoubleArrDeCompress(arr2, cnt, origin_sz, compress_buf, compress_size);
+  // LOG_ASSERT(cnt == ARR_NUM, "cnt %d", cnt);
+  // for (int i = 0; i < ARR_NUM; i++) {
+  //   LOG_ASSERT(double_arr[i] == arr2[i], "%f <--> %f", double_arr[i], arr2[i]);
+  // }
 
   // double ts_arr[ARR_NUM];
   // double min;
