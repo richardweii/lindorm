@@ -89,6 +89,9 @@ enum class MyColumnType {
   MyUInt16,
 };
 
+constexpr int MAX_DIFF_BITS = 12;
+constexpr uint64_t MAX_DIFF_VAL = 0x1 << MAX_DIFF_BITS;
+
 } // namespace LindormContest
 
 #endif

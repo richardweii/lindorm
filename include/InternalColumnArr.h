@@ -50,9 +50,11 @@ public:
       } break;
     }
     if (idx == 0) {
+      diff_cnt = 1;
       min = data_[idx];
       max = data_[idx];
     } else {
+      if (std::abs(data_[idx] - data_[idx-1]) >= MAX_DIFF_VAL) diff_cnt++;
       if (data_[idx] < min) min = data_[idx];
       if (data_[idx] > max) max = data_[idx];
     }
@@ -66,7 +68,7 @@ public:
 
     char* compress_buf;
     uint64_t compress_sz = 0;
-    TArrCompress(data_, cnt, min, max, compress_buf, compress_sz, type_);
+    TArrCompress(data_, cnt, min, max, diff_cnt, compress_buf, compress_sz, type_);
 
     buffer->write(compress_buf, compress_sz, offset);
     naive_free(compress_buf);
@@ -200,6 +202,7 @@ public:
   T min;
   T max;
   MyColumnType type_;
+  int diff_cnt = 1;
 };
 
 template <>
@@ -573,9 +576,11 @@ public:
   void Add(int64_t ts, int idx) {
     arr->data_[idx] = ts;
     if (idx == 0) {
+      arr->diff_cnt = 1;
       arr->min = ts;
       arr->max = ts;
     } else {
+      if (std::abs(arr->data_[idx] - arr->data_[idx-1]) >= MAX_DIFF_VAL) arr->diff_cnt++;
       if ((int64_t)arr->min > ts) arr->min = ts;
       if ((int64_t)arr->max < ts) arr->max = ts;
     }
