@@ -652,6 +652,13 @@ private:
 };
 
 template <>
+inline int64_t ColumnValueWrapper::getFixedSizeValue<int64_t>() {
+  int v;
+  val_->getIntegerValue(v);
+  return v;
+}
+
+template <>
 inline int ColumnValueWrapper::getFixedSizeValue<int>() {
   int v;
   val_->getIntegerValue(v);

@@ -39,7 +39,7 @@ protected:
     return true;
   }
 
-  TReslut res_{};
+  TReslut res_{0};
   bool empty_{true};
   bool need_filter_{false};
   CompareOp cmp_{};
@@ -93,6 +93,7 @@ private:
 };
 
 template class AvgAggregate<int>;
+template class AvgAggregate<int64_t>;
 template class AvgAggregate<double>;
 
 template <>

@@ -58,7 +58,7 @@ static int createTable(LindormContest::TSDBEngine* engine) {
 }
 
 static constexpr int kVinNum = LindormContest::kVinNum;
-static constexpr int kRowsPerVin = 10 * 60;
+static constexpr int kRowsPerVin = 40 * 60;
 
 static bool RowEquals(const LindormContest::Row& a, const LindormContest::Row& b) {
   if (a != b) return false;
