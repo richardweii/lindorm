@@ -1,0 +1,242 @@
+% Total % Received % Xferd Average Speed Time Time Time Current
+Dload Upload Total Spent Left Speed
+100 180 100 45 100 135 299 897 --:--:-- --:--:-- --:--:-- 900
+{"code":"SUCCESS","data":{"returnCode":true}}
+The current evalution program version: [semis-908V1-fix12]
+[INFO] Found the competitor's uploaded zip file from: /tctmp/tccfile
+[INFO] Checking the competitor's zip package to ensure that the content structure is correct ...
+[INFO] TSDB Engine submitted in DEBUG mode
+[INFO] Found TSDB Engine written by CPP
+[INFO] Start to compile the CPP Engine code
+[INFO] Start to execute cmake ...
+[INFO] Start to execute make ...
+[INFO] CPP code compiled
+[INFO] Preparing the empty folder for Database to use ...
+2023-11-07 23:19:47-682 [INFO] Data trait loaded. The data set has [5000] vehicles, and the time span is [10] minutes
+2023-11-07 23:19:47-708 [INFO] Creating DataBase at phase [1]
+m[INFO] 2023-11-07 23:19:47.722528 stat.cpp:146: use 48.218750 MB memory
+m[INFO] 2023-11-07 23:19:47.722546 TSDBEngineImpl.cpp:45: start Load Schema
+Connect new database with empty pre-written data
+2023-11-07 23:19:47-956 [INFO] TSDBEngine loaded. Type: [CPP]
+2023-11-07 23:19:47-994 [INFO] Start to create table
+2023-11-07 23:19:48-397 [INFO] Table created
+2023-11-07 23:19:48-397 [INFO] Start to run write progress...
+m[INFO] 2023-11-07 23:19:47.954006 TSDBEngineImpl.cpp:123: start load block meta
+m[INFO] 2023-11-07 23:19:47.954637 TSDBEngineImpl.cpp:133: load block meta finished
+m[INFO] 2023-11-07 23:19:47.954642 TSDBEngineImpl.cpp:136: start load latest row cache
+m[INFO] 2023-11-07 23:19:47.955215 TSDBEngineImpl.cpp:145: load latest row cache finished
+m[INFO] 2023-11-07 23:19:47.955890 TSDBEngineImpl.cpp:153: ======== Finish connect!========
+m[INFO] 2023-11-07 23:19:47.998970 TSDBEngineImpl.cpp:158: start create table table
+m[INFO] 2023-11-07 23:19:48.397040 TSDBEngineImpl.cpp:173: create table table finished
+m[INFO] 2023-11-07 23:20:51.731679 TSDBEngineImpl.cpp:193: start shutdown
+m[INFO] 2023-11-07 23:20:51.732353 TSDBEngineImpl.cpp:198: Start Save Schema
+m[INFO] 2023-11-07 23:20:51.732548 TSDBEngineImpl.cpp:202: Start flush memtable
+m[INFO] 2023-11-07 23:20:57.842369 stat.cpp:54: *********FILE SUMMARY*********
+m[INFO] 2023-11-07 23:20:57.842387 stat.cpp:55: write_cnt: 3000000, write wait cnt: 0, flush wait cnt: 0
+m[INFO] 2023-11-07 23:20:57.842390 stat.cpp:58: col 0 col_name AELJ, col_type Integer, origin_sz 11 MB, compress_sz 1 MB compress rate is 0.105000
+m[INFO] 2023-11-07 23:20:57.842409 stat.cpp:58: col 1 col_name APVN, col_type Integer, origin_sz 11 MB, compress_sz 1 MB compress rate is 0.105000
+m[INFO] 2023-11-07 23:20:57.842411 stat.cpp:58: col 2 col_name AXXB, col_type string, origin_sz 105 MB, compress_sz 62 MB compress rate is 0.589522
+m[INFO] 2023-11-07 23:20:57.842413 stat.cpp:58: col 3 col_name BJSS, col_type Integer, origin_sz 11 MB, compress_sz 1 MB compress rate is 0.105000
+m[INFO] 2023-11-07 23:20:57.842415 stat.cpp:58: col 4 col_name BRMN, col_type double, origin_sz 22 MB, compress_sz 15 MB compress rate is 0.675388
+m[INFO] 2023-11-07 23:20:57.842417 stat.cpp:58: col 5 col_name BYQH, col_type Integer, origin_sz 11 MB, compress_sz 9 MB compress rate is 0.795957
+m[INFO] 2023-11-07 23:20:57.842418 stat.cpp:58: col 6 col_name CJMA, col_type Integer, origin_sz 11 MB, compress_sz 10 MB compress rate is 0.958133
+m[INFO] 2023-11-07 23:20:57.842420 stat.cpp:58: col 7 col_name CMGV, col_type Integer, origin_sz 11 MB, compress_sz 1 MB compress rate is 0.136236
+m[INFO] 2023-11-07 23:20:57.842421 stat.cpp:58: col 8 col_name CTEI, col_type Integer, origin_sz 11 MB, compress_sz 1 MB compress rate is 0.166766
+m[INFO] 2023-11-07 23:20:57.842423 stat.cpp:58: col 9 col_name CTYC, col_type Integer, origin_sz 11 MB, compress_sz 11 MB compress rate is 1.013750
+m[INFO] 2023-11-07 23:20:57.842424 stat.cpp:58: col 10 col_name DEKG, col_type Integer, origin_sz 11 MB, compress_sz 2 MB compress rate is 0.260869
+m[INFO] 2023-11-07 23:20:57.842426 stat.cpp:58: col 11 col_name DHJE, col_type Integer, origin_sz 11 MB, compress_sz 11 MB compress rate is 1.013750
+m[INFO] 2023-11-07 23:20:57.842428 stat.cpp:58: col 12 col_name EVXL, col_type Integer, origin_sz 11 MB, compress_sz 0 MB compress rate is 0.011250
+m[INFO] 2023-11-07 23:20:57.842429 stat.cpp:58: col 13 col_name EXAS, col_type Integer, origin_sz 11 MB, compress_sz 3 MB compress rate is 0.331379
+m[INFO] 2023-11-07 23:20:57.842431 stat.cpp:58: col 14 col_name FPFF, col_type Integer, origin_sz 11 MB, compress_sz 4 MB compress rate is 0.416249
+m[INFO] 2023-11-07 23:20:57.842433 stat.cpp:58: col 15 col_name GDFW, col_type Integer, origin_sz 11 MB, compress_sz 1 MB compress rate is 0.166774
+m[INFO] 2023-11-07 23:20:57.842434 stat.cpp:58: col 16 col_name HQBX, col_type Integer, origin_sz 11 MB, compress_sz 1 MB compress rate is 0.105000
+m[INFO] 2023-11-07 23:20:57.842436 stat.cpp:58: col 17 col_name IJKG, col_type Integer, origin_sz 11 MB, compress_sz 10 MB compress rate is 0.941714
+m[INFO] 2023-11-07 23:20:57.842437 stat.cpp:58: col 18 col_name IYMN, col_type string, origin_sz 20 MB, compress_sz 0 MB compress rate is 0.019762
+m[INFO] 2023-11-07 23:20:57.842454 stat.cpp:58: col 19 col_name JENI, col_type Integer, origin_sz 11 MB, compress_sz 8 MB compress rate is 0.702332
+m[INFO] 2023-11-07 23:20:57.842456 stat.cpp:58: col 20 col_name JUFJ, col_type double, origin_sz 22 MB, compress_sz 15 MB compress rate is 0.697015
+m[INFO] 2023-11-07 23:20:57.842458 stat.cpp:58: col 21 col_name JUMF, col_type Integer, origin_sz 11 MB, compress_sz 10 MB compress rate is 0.885414
+m[INFO] 2023-11-07 23:20:57.842459 stat.cpp:58: col 22 col_name JXOS, col_type Integer, origin_sz 11 MB, compress_sz 10 MB compress rate is 0.956650
+m[INFO] 2023-11-07 23:20:57.842461 stat.cpp:58: col 23 col_name JYXY, col_type Integer, origin_sz 11 MB, compress_sz 9 MB compress rate is 0.829175
+m[INFO] 2023-11-07 23:20:57.842462 stat.cpp:58: col 24 col_name KSSM, col_type double, origin_sz 22 MB, compress_sz 19 MB compress rate is 0.835982
+m[INFO] 2023-11-07 23:20:57.842464 stat.cpp:58: col 25 col_name MJBX, col_type Integer, origin_sz 11 MB, compress_sz 10 MB compress rate is 0.900733
+m[INFO] 2023-11-07 23:20:57.842465 stat.cpp:58: col 26 col_name MQXF, col_type Integer, origin_sz 11 MB, compress_sz 10 MB compress rate is 0.886273
+m[INFO] 2023-11-07 23:20:57.842467 stat.cpp:58: col 27 col_name MXVL, col_type Integer, origin_sz 11 MB, compress_sz 4 MB compress rate is 0.362629
+m[INFO] 2023-11-07 23:20:57.842468 stat.cpp:58: col 28 col_name OCCI, col_type Integer, origin_sz 11 MB, compress_sz 10 MB compress rate is 0.886973
+m[INFO] 2023-11-07 23:20:57.842470 stat.cpp:58: col 29 col_name OGOM, col_type Integer, origin_sz 11 MB, compress_sz 2 MB compress rate is 0.260869
+m[INFO] 2023-11-07 23:20:57.842471 stat.cpp:58: col 30 col_name OKTM, col_type string, origin_sz 9 MB, compress_sz 2 MB compress rate is 0.292081
+m[INFO] 2023-11-07 23:20:57.842473 stat.cpp:58: col 31 col_name PLNE, col_type Integer, origin_sz 11 MB, compress_sz 10 MB compress rate is 0.904643
+m[INFO] 2023-11-07 23:20:57.842474 stat.cpp:58: col 32 col_name QCBJ, col_type string, origin_sz 8 MB, compress_sz 2 MB compress rate is 0.245130
+m[INFO] 2023-11-07 23:20:57.842476 stat.cpp:58: col 33 col_name QYZI, col_type string, origin_sz 25 MB, compress_sz 0 MB compress rate is 0.016481
+m[INFO] 2023-11-07 23:20:57.842478 stat.cpp:58: col 34 col_name RHCS, col_type Integer, origin_sz 11 MB, compress_sz 0 MB compress rate is 0.086853
+m[INFO] 2023-11-07 23:20:57.842479 stat.cpp:58: col 35 col_name RJUR, col_type string, origin_sz 8 MB, compress_sz 0 MB compress rate is 0.039444
+m[INFO] 2023-11-07 23:20:57.842481 stat.cpp:58: col 36 col_name RNSE, col_type Integer, origin_sz 11 MB, compress_sz 6 MB compress rate is 0.538176
+m[INFO] 2023-11-07 23:20:57.842482 stat.cpp:58: col 37 col_name RXBA, col_type Integer, origin_sz 11 MB, compress_sz 10 MB compress rate is 0.894782
+m[INFO] 2023-11-07 23:20:57.842484 stat.cpp:58: col 38 col_name SBNJ, col_type double, origin_sz 22 MB, compress_sz 15 MB compress rate is 0.689584
+m[INFO] 2023-11-07 23:20:57.842485 stat.cpp:58: col 39 col_name SCSF, col_type Integer, origin_sz 11 MB, compress_sz 6 MB compress rate is 0.577354
+m[INFO] 2023-11-07 23:20:57.842487 stat.cpp:58: col 40 col_name SGMS, col_type double, origin_sz 22 MB, compress_sz 18 MB compress rate is 0.794459
+m[INFO] 2023-11-07 23:20:57.842488 stat.cpp:58: col 41 col_name SUTP, col_type string, origin_sz 291 MB, compress_sz 166 MB compress rate is 0.571647
+m[INFO] 2023-11-07 23:20:57.842490 stat.cpp:58: col 42 col_name UPNT, col_type Integer, origin_sz 11 MB, compress_sz 7 MB compress rate is 0.636671
+m[INFO] 2023-11-07 23:20:57.842491 stat.cpp:58: col 43 col_name VDIK, col_type string, origin_sz 8 MB, compress_sz 2 MB compress rate is 0.266165
+m[INFO] 2023-11-07 23:20:57.842493 stat.cpp:58: col 44 col_name VEOD, col_type double, origin_sz 22 MB, compress_sz 15 MB compress rate is 0.686454
+m[INFO] 2023-11-07 23:20:57.842496 stat.cpp:58: col 45 col_name VHQI, col_type double, origin_sz 22 MB, compress_sz 18 MB compress rate is 0.794375
+m[INFO] 2023-11-07 23:20:57.842498 stat.cpp:58: col 46 col_name VKYF, col_type Integer, origin_sz 11 MB, compress_sz 4 MB compress rate is 0.385000
+m[INFO] 2023-11-07 23:20:57.842499 stat.cpp:58: col 47 col_name VOTU, col_type double, origin_sz 22 MB, compress_sz 17 MB compress rate is 0.753416
+m[INFO] 2023-11-07 23:20:57.842501 stat.cpp:58: col 48 col_name VRCM, col_type Integer, origin_sz 11 MB, compress_sz 7 MB compress rate is 0.637744
+m[INFO] 2023-11-07 23:20:57.842502 stat.cpp:58: col 49 col_name VZWB, col_type Integer, origin_sz 11 MB, compress_sz 7 MB compress rate is 0.614116
+m[INFO] 2023-11-07 23:20:57.842504 stat.cpp:58: col 50 col_name WLZH, col_type double, origin_sz 22 MB, compress_sz 15 MB compress rate is 0.657322
+m[INFO] 2023-11-07 23:20:57.842505 stat.cpp:58: col 51 col_name WVKX, col_type Integer, origin_sz 11 MB, compress_sz 6 MB compress rate is 0.577586
+m[INFO] 2023-11-07 23:20:57.842507 stat.cpp:58: col 52 col_name WZVQ, col_type string, origin_sz 48 MB, compress_sz 25 MB compress rate is 0.526680
+m[INFO] 2023-11-07 23:20:57.842509 stat.cpp:58: col 53 col_name XZGR, col_type Integer, origin_sz 11 MB, compress_sz 1 MB compress rate is 0.105000
+m[INFO] 2023-11-07 23:20:57.842510 stat.cpp:58: col 54 col_name YCFN, col_type string, origin_sz 91 MB, compress_sz 50 MB compress rate is 0.554619
+m[INFO] 2023-11-07 23:20:57.842512 stat.cpp:58: col 55 col_name YGOI, col_type Integer, origin_sz 11 MB, compress_sz 1 MB compress rate is 0.105000
+m[INFO] 2023-11-07 23:20:57.842513 stat.cpp:58: col 56 col_name YHSA, col_type Integer, origin_sz 11 MB, compress_sz 9 MB compress rate is 0.835224
+m[INFO] 2023-11-07 23:20:57.842515 stat.cpp:58: col 57 col_name YQGL, col_type double, origin_sz 22 MB, compress_sz 19 MB compress rate is 0.862292
+m[INFO] 2023-11-07 23:20:57.842516 stat.cpp:58: col 58 col_name YVEN, col_type Integer, origin_sz 11 MB, compress_sz 6 MB compress rate is 0.576376
+m[INFO] 2023-11-07 23:20:57.842518 stat.cpp:58: col 59 col_name ZXTE, col_type Integer, origin_sz 11 MB, compress_sz 4 MB compress rate is 0.362629
+m[INFO] 2023-11-07 23:20:57.842519 stat.cpp:63: col 60, origin_sz 22 MB, compress_sz 6 MB compress rate is 0.283131
+m[INFO] 2023-11-07 23:20:57.842597 stat.cpp:146: use 2580.621094 MB memory
+m[INFO] 2023-11-07 23:20:57.842601 stat.cpp:70: *********PERFORMANCE STAT SUMMARY*********
+m[INFO] 2023-11-07 23:20:57.842602 stat.cpp:71:
+====================latest_query_cnt: 0
+====================time_range_query_cnt: 0
+====================agg_query_cnt: 0
+====================downsample_query_cnt: 0
+====================ReadCache Hit: 0, MISS: 0, HitRate: -nan
+====================ReadCache data wait :0, lru wait 0
+====================Alloc time: 5966
+====================wait aio :0
+===================disk_blk_access_cnt :0===================all_equal_compress :41643, int_diff_compress: 406745, zstd_compress: 466612
+m[INFO] 2023-11-07 23:20:57.842606 stat.cpp:82: *******************************************
+2023-11-07 23:22:29-573 [INFO] Write progress finished. Rows written totally: [3000000]. Time consumed minutes: [2]
+[INFO] Check the phase 1 process with pid 440 has exit ...
+2023-11-07 23:22:29-822 [INFO] Data trait loaded. The data set has [5000] vehicles, and the time span is [10] minutes
+2023-11-07 23:22:29-858 [INFO] Creating DataBase at phase [2]
+m[INFO] 2023-11-07 23:22:29.870041 stat.cpp:146: use 46.750000 MB memory
+m[INFO] 2023-11-07 23:22:29.870061 TSDBEngineImpl.cpp:45: start Load Schema
+Found pre-written data with columns' num: [60]
+2023-11-07 23:22:30-570 [INFO] TSDBEngine loaded. Type: [CPP]
+2023-11-07 23:22:30-720 [INFO] Start to run query progress...
+2023-11-07 23:23:00-806 [INFO] Latest query progress finished, we queried [9013900] rows and elapsed [0] minutes
+m[INFO] 2023-11-07 23:22:29.870248 TSDBEngineImpl.cpp:76: Load Schema finished
+m[INFO] 2023-11-07 23:22:30.65652 TSDBEngineImpl.cpp:103: start load vin2vid
+m[INFO] 2023-11-07 23:22:30.76729 TSDBEngineImpl.cpp:116: load vin2vid finished
+m[INFO] 2023-11-07 23:22:30.76829 TSDBEngineImpl.cpp:123: start load block meta
+m[INFO] 2023-11-07 23:22:30.224441 TSDBEngineImpl.cpp:133: load block meta finished
+m[INFO] 2023-11-07 23:22:30.224457 TSDBEngineImpl.cpp:136: start load latest row cache
+m[INFO] 2023-11-07 23:22:30.567552 TSDBEngineImpl.cpp:145: load latest row cache finished
+m[INFO] 2023-11-07 23:22:30.569433 TSDBEngineImpl.cpp:153: ======== Finish connect!========
+m[ERROR] 2023-11-07 23:22:30.670252 /root/cpp-evalution-jni-adapter/lindorm-tsdb-contest-cpp/source/TSDBEngineImpl.cpp:508: lookup invalid VIN
+TimeRangeQueryRequest :VID 4328 [1694078597628, 1694078657628) [AELJ] [APVN] [BJSS] [BYQH] [CJMA] [VHQI] [YCFN] [YHSA] [YVEN] [ZXTE]
+TimeRangeQueryRequest :VID 2224 [1694078524959, 1694078584959) [AXXB] [CMGV] [CTEI] [CTYC] [DEKG] [DHJE] [EVXL] [EXAS] [FPFF] [VOTU]
+TimeRangeQueryRequest :VID 1718 [1694078726553, 1694078786553) [GDFW] [HQBX] [IJKG] [IYMN] [JENI] [JUMF] [JXOS] [JYXY] [MJBX] [WLZH]
+TimeRangeQueryRequest :VID 3255 [1694078972261, 1694079032261) [MQXF] [MXVL] [OCCI] [OGOM] [OKTM] [PLNE] [RHCS] [RNSE] [RXBA] [YQGL]
+TimeRangeQueryRequest :VID 2502 [1694078614813, 1694078674813) [BRMN] [QCBJ] [SCSF] [UPNT] [VKYF] [VRCM] [VZWB] [WVKX] [XZGR] [YGOI]
+TimeRangeQueryRequest :VID 4748 [1694078755638, 1694078815638) [AELJ] [APVN] [BJSS] [BYQH] [CJMA] [JUFJ] [QYZI] [YHSA] [YVEN] [ZXTE]
+TimeRangeQueryRequest :VID 2275 [1694078601878, 1694078661878) [CMGV] [CTEI] [CTYC] [DEKG] [DHJE] [EVXL] [EXAS] [FPFF] [KSSM] [RJUR]
+TimeRangeQueryRequest :VID 359 [1694078731836, 1694078791836) [GDFW] [HQBX] [IJKG] [JENI] [JUMF] [JXOS] [JYXY] [MJBX] [SBNJ] [SUTP]
+TimeRangeQueryRequest :VID 1834 [1694078982681, 1694079042681) [MQXF] [MXVL] [OCCI] [OGOM] [PLNE] [RHCS] [RNSE] [RXBA] [SGMS] [VDIK]
+TimeRangeQueryRequest :VID 4586 [1694078877320, 1694078937320) [SCSF] [UPNT] [VEOD] [VKYF] [VRCM] [VZWB] [WVKX] [WZVQ] [XZGR] [YGOI]
+TimeRangeQueryRequest :VID 2381 [1694078539890, 1694078599890) [AELJ] [APVN] [BJSS] [BYQH] [CJMA] [VHQI] [YCFN] [YHSA] [YVEN] [ZXTE]
+TimeRangeQueryRequest :VID 459 [1694078890227, 1694078950227) [AXXB] [CMGV] [CTEI] [CTYC] [DEKG] [DHJE] [EVXL] [EXAS] [FPFF] [VOTU]
+TimeRangeQueryRequest :VID 3248 [1694078710595, 1694078770595) [GDFW] [HQBX] [IJKG] [IYMN] [JENI] [JUMF] [JXOS] [JYXY] [MJBX] [WLZH]
+TimeRangeQueryRequest :VID 3003 [1694078972135, 1694079032135) [MQXF] [MXVL] [OCCI] [OGOM] [OKTM] [PLNE] [RHCS] [RNSE] [RXBA] [YQGL]
+TimeRangeQueryRequest :VID 4372 [1694078628822, 1694078688822) [BRMN] [QCBJ] [SCSF] [UPNT] [VKYF] [VRCM] [VZWB] [WVKX] [XZGR] [YGOI]
+TimeRangeQueryRequest :VID 4028 [1694078944934, 1694079004934) [AELJ] [APVN] [BJSS] [BYQH] [CJMA] [JUFJ] [QYZI] [YHSA] [YVEN] [ZXTE]
+TimeRangeQueryRequest :VID 3388 [1694078661383, 1694078721383) [CMGV] [CTEI] [CTYC] [DEKG] [DHJE] [EVXL] [EXAS] [FPFF] [KSSM] [RJUR]
+TimeRangeQueryRequest :VID 972 [1694079025188, 1694079085188) [GDFW] [HQBX] [IJKG] [JENI] [JUMF] [JXOS] [JYXY] [MJBX] [SBNJ] [SUTP]
+TimeRangeQueryRequest :VID 1387 [1694079049613, 1694079109613) [MQXF] [MXVL] [OCCI] [OGOM] [PLNE] [RHCS] [RNSE] [RXBA] [SGMS] [VDIK]
+TimeRangeQueryRequest :VID 4588 [1694078796038, 1694078856038) [SCSF] [UPNT] [VEOD] [VKYF] [VRCM] [VZWB] [WVKX] [WZVQ] [XZGR] [YGOI]
+TimeRangeQueryRequest :VID 384 [1694078688857, 1694078748857) [AELJ] [APVN] [BJSS] [BYQH] [CJMA] [VHQI] [YCFN] [YHSA] [YVEN] [ZXTE]
+TimeRangeQueryRequest :VID 4933 [1694078787509, 1694078847509) [AXXB] [CMGV] [CTEI] [CTYC] [DEKG] [DHJE] [EVXL] [EXAS] [FPFF] [VOTU]
+TimeRangeQueryRequest :VID 301 [1694078888812, 1694078948812) [GDFW] [HQBX] [IJKG] [IYMN] [JENI] [JUMF] [JXOS] [JYXY] [MJBX] [WLZH]
+TimeRangeQueryRequest :VID 305 [1694078790472, 1694078850472) [MQXF] [MXVL] [OCCI] [OGOM] [OKT2023-11-07 23:23:30-810 [INFO] Time range query progress finished, we queried [8766000] rows and elapsed [0] minutes
+M] [PLNE] [RHCS] [RNSE] [RXBA] [YQGL]
+TimeRangeQueryRequest :VID 1757 [1694078903890, 1694078963890) TimeRangeQueryRequest :VID 1342 [1694078935088, 1694078995088) [BRMN] [AELJ] [QCBJ] [APVN] [SCSF] [BJSS] [UPNT] [BYQH] [CJMA] [VKYF] [VRCM] [JUFJ] [VZWB] [QYZI] [WVKX] [YHSA] [XZGR] [YVEN] [YGOI] [ZXTE]
+
+TimeRangeQueryRequest :VID 539 [1694078734528, 1694078794528) [CMGV] [CTEI] [CTYC] [DEKG] [DHJE] [EVXL] [EXAS] [FPFF] [KSSM] [RJUR]
+TimeRangeQueryRequest :VID 3230 [1694078839582, 1694078899582) [GDFW] [HQBX] [IJKG] [JENI] [JUMF] [JXOS] [JYXY] [MJBX] [SBNJ] [SUTP]
+TimeRangeQueryRequest :VID 919 [1694078691546, 1694078751546) [MQXF] [MXVL] [OCCI] [OGOM] [PLNE] [RHCS] [RNSE] [RXBA] [SGMS] [VDIK]
+TimeRangeQueryRequest :VID 951 [1694078797169, 1694078857169) TimeRangeQueryRequest :VID 2819 [1694078948734, 1694079008734) [SCSF] [AELJ] [UPNT] [VEOD] [APVN] [VKYF] [BJSS] [VRCM] [BYQH] [CJMA] [VZWB] [VHQI] [WVKX] [WZVQ] [YCFN] [XZGR] [YHSA] [YGOI] [YVEN] [ZXTE]
+
+TimeRangeQueryRequest :VID 2811 [1694078846838, 1694078906838) [AXXB] [CMGV] [CTEI] [CTYC] [DEKG] [DHJE] [EVXL] [EXAS] [FPFF] [VOTU]
+TimeRangeQueryRequest :VID 3933 [1694078601876, 1694078661876) [GDFW] [HQBX] [IJKG] [IYMN] [JENI] [JUMF] [JXOS] [JYXY] [MJBX] [WLZH]
+TimeRangeQueryRequest :VID 4778 [1694078634571, 1694078694571) [MQXF] [MXVL] [OCCI] [OGOM] [OKTM] [PLNE] [RHCS] [RNSE] [RXBA] [YQGL]
+TimeRangeQueryRequest :VID 670 [1694078943467, 1694079003467) [BRMN] [QCBJ] [SCSF] [UPNT] [VKYF] [VRCM] [VZWB] [WVKX] [XZGR] [YGOI]
+TimeRangeQueryRequest :VID 2500 [1694078701899, 1694078761899) [AELJ] [APVN] [BJSS] [BYQH] [CJMA] [JUFJ] [QYZI] [YHSA] [YVEN] [ZXTE]
+TimeRangeQueryRequest :VID 1122 [1694078968492, 1694079028492) [CMGV] [CTEI] [CTYC] [DEKG] [DHJE] [EVXL] [EXAS] [FPFF] [KSSM] [RJUR]
+TimeRangeQueryRequest :VID 4082 [1694079056498, 1694079116498) [GDFW] [HQBX] [IJKG] TimeRangeQueryRequest :VID 3967 [1694079023181, 1694079083181) [JENI] [MQXF] [JUMF] [MXVL] [JXOS] [JYXY] [OCCI] [MJBX] [SBNJ] [SUTP] [OGOM]
+[PLNE] [RHCS] [RNSE] [RXBA] [SGMS] [VDIK]
+TimeRangeQueryRequest :VID 1288 [1694078835899, 1694078895899) [SCSF] [UPNT] [VEOD] [VKYF] [VRCM] [VZWB] [WVKX] [WZVQ] [XZGR] [YGOI]
+TimeRangeQueryRequest :VID 2190 [1694078858568, 1694078918568) [AELJ] [APVN] [BJSS] [BYQH] [CJMA] [VHQI] [YCFN] [YHSA] [YVEN] [ZXTE]
+TimeRangeQueryRequest :VID 2948 [1694078687533, 1694078747533) [AXXB] [CMGV] [CTEI] [CTYC] [DEKG] [DHJE] [EVXL] [EXAS] [FPFF] [VOTU]
+TimeRangeQueryRequest :VID 2889 [1694078817294, 1694078877294) [GDFW] [HQBX] [IJKG] [IYMN] [JENI] [JUMF] [JXOS] [JYXY] [MJBX] [WLZH]
+TimeRangeQueryRequest :VID 3093 [1694078659123, 1694078719123) [MQXF] [MXVL] [OCCI] [OGOM] [OKTM] [PLNE] [RHCS] [RNSE] [RXBA] [YQGL]
+TimeRangeQueryRequest :VID 3193 [1694078949651, 1694079009651) [BRMN] [QCBJ] [SCSF] [UPNT] [VKYF] [VRCM] [VZWB] [WVKX] [XZGR] [YGOI]
+TimeRangeQueryRequest :VID 4276 [1694078717255, 1694078777255) [AELJ] [APVN] [BJSS] [BYQH] [CJMA] [JUFJ] [QYZI] [YHSA] [YVEN] [ZXTE]
+TimeRangeQueryRequest :VID 292 [1694078740351, 1694078800351) [CMGV] [CTEI] [CTYC] [DEKG] [DHJE] [EVXL] [EXAS] [FPFF] [KSSM] [RJUR]
+TimeRangeQueryRequest :VID 2519 [1694078916628, 1694078976628) [GDFW] [HQBX] [IJKG] [JENI] [JUMF] [JXOS] [JYXY] [MJBX] [SBNJ] [SUTP]
+TimeRangeQueryRequest :VID 1158 [1694078618651, 1694078678651) [MQXF] [MXVL] [OCCI] [OGOM] [PLNE] [RHCS] [RNSE] [RXBA] [SGMS] [VDIK]
+TimeRangeQueryRequest :VID 2338 [1694078887473, 1694078947473) [SCSF] [UPNT] [VEOD] [VKYF] [VRCM] [VZWB] [WVKX] [WZVQ] [XZGR] [YGOI]
+TimeRangeAggregationRequest :VID 2120 [1694078772509, 1694079072509) [DEKG]
+TimeRangeAggregationRequest :VID 4533 [1694078738414, 1694079038414) [DEKG]
+TimeRangeAggregationRequest :VID 1082 [1694078599072, 1694078899072) [DHJE]
+TimeRangeAggregationRequest :VID 1193 [1694078672541, 1694078972541) [DHJE]
+TimeRangeAggregationRequest :VID 1943 [1694078728828, 1694079028828) TimeRangeAggregationRequest :VID 82 [1694078753895, 1694079053895) [EXAS]
+[EXAS]
+TimeRangeAggregationRequest :VID 4440 [1694078534144, 1694078834144) [IJKG]
+TimeRangeAggreg2023-11-07 23:24:00-818 [INFO] Aggregate query progress finished, we queried [2428135] rows and elapsed [0] minutes
+2023-11-07 23:24:30-823 [INFO] Downsample query progress finished, we queried [6580038] rows and elapsed [0] minutes
+2023-11-07 23:24:30.967:INFO::main: Logging initialized @121265ms to org.eclipse.jetty.util.log.StdErrLog
+2023-11-07 23:24:30-973 [INFO] Raw result: [{"latestQueriedRows":"9013900","timeRangeQueriedRows":"8766000","downsampleQueriedRows":"6580038","compressRate":"0.9510176496134556","latestQueryTimeConsumedMillis":"21504","writtenConsumedTimeMillis":"161145","timeRangeTimeConsumedMillis":"22983","aggregateQueriedRows":"2428135","aggregateTimeConsumedMillis":"27591","debugMode":"true","writtenRows":"3000000","downsampleTimeConsumedMillis":"27955"}]. This result may be further processed, and is for reference only, please refer to the actual scores
+ationRequest :VID 3375 [1694078808382, 1694079108382) TimeRangeAggregationRequest :VID 159 [1694078705662, 1694079005662) [JENI]
+[IJKG]
+TimeRangeAggregationRequest :VID 546 [1694078768950, 1694079068950) [JENI]
+TimeRangeAggregationRequest :VID 1464 [1694078819830, 1694079119830) [JUMF]
+TimeRangeAggregationRequest :VID 3678 [1694078635270, 1694078935270) [JUMF]
+TimeRangeAggregationRequest :VID 4726 [1694078544254, 1694078844254) [JXOS]
+TimeRangeAggregationRequest :VID 3090 [1694078575594, 1694078875594) [JXOS]
+TimeRangeAggregationRequest :VID 2944 [1694078524321, 1694078824321) [MJBX]
+TimeRangeAggregationRequest :VID 1999 [1694078546345, 1694078846345) [MJBX]
+TimeRangeAggregationRequest :VID 4495 [1694078686539, 1694078986539) [MXVL]
+TimeRangeAggregationRequest :VID 572 [1694078705345, 1694079005345) [MXVL]
+TimeRangeAggregationRequest :VID 2163 [1694078739304, 1694079039304) [RHCS]
+TimeRangeAggregationRequest :VID 620 [1694078591633, 1694078891633) [OCCI]
+TimeRangeAggregationRequest :VID 2144 [1694078705793, 1694079005793) TimeRangeAggregationRequest :VID 3877 [1694078726735, 1694079026735) [OGOM]
+[OCCI]
+TimeRangeAggregationRequest :VID 1745 [1694078691351, 1694078991351) [OGOM]
+TimeRangeAggregationRequest :VID 573 [1694078572713, 1694078872713) [PLNE]
+TimeRangeAggregationRequest :VID 3956 [1694078816612, 1694079116612) [PLNE]
+TimeRangeAggregationRequest :VID 23 [1694078668294, 1694078968294) [RHCS]
+TimeRangeDownsampleRequest :VID 4961 [1694078635289, 1694078815289), interval 30000 [JYXY]
+TimeRangeDownsampleRequest :VID 4142 [1694078831262, 1694079011262), interval 30000 [JYXY]
+TimeRangeDownsampleRequest :VID 2589 [1694078924122, 1694079104122), interval 30000 [JYXY]
+TimeRangeDownsampleRequest :VID 4813 [1694078550849, 1694078730849), interval 30000 [MQXF]
+TimeRangeDownsampleRequest :VID 4666 [1694078799747, 1694078979747), interval 30000 [MQXF]
+TimeRangeDownsampleRequest :VID 3927 [1694078834476, 1694079014476), interval 30000 [MQXF]
+TimeRangeDownsampleRequest :VID 1442 [1694078656884, 1694078836884), interval 30000 [MQXF]
+TimeRangeDownsampleRequest :VID 80 [1694078865192, 1694079045192), interval 30000 [RNSE]
+TimeRangeDownsampleRequest :VID 3392 [1694078684174, 1694078864174), interval 30000 [RNSE]
+TimeRangeDownsampleRequest :VID 4541 [1694078580837, 1694078760837), interval 30000 [RNSE]
+TimeRangeDownsampleRequest :VID 3188 [1694078819119, 1694078999119), interval 30000 [RNSE]
+TimeRangeDownsampleRequest :VID 2326 [1694078727821, 1694078907821), interval 30000 [VKYF]
+TimeRangeDownsampleRequest :VID 1048 [1694078816743, 1694078996743), interval 30000 [VKYF]
+TimeRangeDownsampleRequest :VID 4973 [1694078668291, 1694078848291), interval 30000 [VKYF]
+TimeRangeDownsampleRequest :VID 1497 [1694078925445, 1694079105445), interval 30000 [VKYF]
+TimeRangeDownsampleRequest :VID 952 [1694078629079, 1694078809079), interval 30000 [VZWB]
+TimeRangeDownsampleRequest :VID 457 [1694078729901, 1694078909901), interval 30000 [VZWB]
+TimeRangeDownsampleRequest :VID 2114 [1694078704912, 1694078884912), interval 30000 [VZWB]
+TimeRangeDownsampleRequest :VID 4218 [1694078813988, 1694078993988), interval 30000 [VZWB]
+TimeRangeDownsampleRequest :VID 4592 [1694078893372, 1694079073372), interval 30000 [WVKX]
+TimeRangeDownsampleRequest :VID 2169 [1694078905314, 1694079085314), interval 30000 [WVKX]
+TimeRangeDownsampleRequest :VID 1227 [1694078865565, 1694079045565), interval 30000 [WVKX]
+TimeRangeDownsampleRequest :VID 1245 [1694078576459, 1694078756459), interval 30000 [WVKX]
+TimeRangeDownsampleRequest :VID 4989 [1694078587802, 1694078767802), interval 30000 [YGOI]
+TimeRangeDownsampleRequest :VID 2717 [1694078557587, 1694078737587), interval 30000 [YGOI]
+TimeRangeDownsampleRequest :VID 3803 [1694078553305, 1694078733305), interval 30000 [YGOI]
+[INFO] Evalution finished. Starting generating output file ...
+adding: result.json (deflated 50%)
+[INFO] Finished
+% Total % Received % Xferd Average Speed Time Time Time Current
+Dload Upload Total Spent Left Speed
+100 961 100 388 100 573 4541 6706 --:--:-- --:--:-- --:--:-- 6741
+{cost_time:37,info:"null","score_detail":{"score": 0, "scoreJson": {"score": 56.70673265470498, "writtenRowsPerSec": 18616.773713115515, "latestQueriedRowsPerSec": 419173.1770833333, "timeRangeQueriedRowsPerSec": 381412.34825740766, "aggregatedQueriedRowsPerSec": 88004.6029502374, "downsampleQueriedRowsPerSec": 235379.64585941692, "compressRate": 0.9510176496134556}, "success": false}}
