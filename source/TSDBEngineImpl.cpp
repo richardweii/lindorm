@@ -281,6 +281,7 @@ int TSDBEngineImpl::shutdown() {
   return 0;
 }
 
+std::mutex mm;
 int TSDBEngineImpl::write(const WriteRequest& writeRequest) {
   RECORD_FETCH_ADD(write_cnt, writeRequest.rows.size());
   std::vector<std::vector<Row>> rows(kWorkerThread);

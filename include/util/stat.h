@@ -40,6 +40,11 @@ extern std::atomic<int64_t> wait_aio;
 extern std::atomic<int64_t> print_row_cnt;
 
 extern std::atomic<int64_t> write_phase_sync;
+extern std::atomic<int64_t> all_equal_compress_cnt;
+extern std::atomic<int64_t> int_diff_compress_cnt;
+extern std::atomic<int64_t> ts_diff_ccompress_cnt;
+extern std::atomic<int64_t> zstd_compress_cnt;
+extern std::atomic<int64_t> high_compress_cnt;
 
 #define ENABLE_STAT
 #ifdef ENABLE_STAT

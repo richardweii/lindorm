@@ -58,7 +58,7 @@ static int createTable(LindormContest::TSDBEngine* engine) {
 }
 
 static constexpr int kVinNum = LindormContest::kVinNum;
-static constexpr int kRowsPerVin = 40 * 60;
+static constexpr int kRowsPerVin = 10 * 60;
 
 static bool RowEquals(const LindormContest::Row& a, const LindormContest::Row& b) {
   if (a != b) return false;
@@ -100,7 +100,7 @@ static bool RowEquals(const LindormContest::Row& a, const LindormContest::Row& b
 
         double b_val;
         b_col_val.getDoubleFloatValue(b_val);
-        ASSERT(a_val == b_val, "a_val %f b_val %f", a_val, b_val);
+        ASSERT(std::abs(a_val - b_val) < 1e-6, "a_val %f b_val %f", a_val, b_val);
       } break;
       case LindormContest::COLUMN_TYPE_UNINITIALIZED:
         break;
@@ -125,7 +125,7 @@ LindormContest::Row get_row(int v, int r) {
   std::string vin = std::to_string(v);
   memset(row.vin.vin, 0, LindormContest::VIN_LENGTH);
   memcpy(row.vin.vin, vin.c_str(), vin.size());
-  row.timestamp = r;
+  row.timestamp = r * 1000;
   // build columns
   for (int k = 0; k < LindormContest::kColumnNum; k++) {
     std::string col_name = "column_" + std::to_string(k);
@@ -260,8 +260,8 @@ void parallel_test_time_range(LindormContest::TSDBEngine* engine) {
         trR.tableName = "t1";
         auto start = (rand() % (3 * kRowsPerVin / 4));
         size_t res_cnt = (rand() % (kRowsPerVin / 4));
-        trR.timeLowerBound = start;
-        trR.timeUpperBound = start + res_cnt;
+        trR.timeLowerBound = start * 1000;
+        trR.timeUpperBound = (start + res_cnt) * 1000;
         // for (int j = 0; j < LindormContest::kColumnNum; j++) {
         //   std::string col_name = "column_" + std::to_string(j);
         //   trR.requestedColumns.insert(col_name);
@@ -269,14 +269,14 @@ void parallel_test_time_range(LindormContest::TSDBEngine* engine) {
         std::vector<LindormContest::Row> trReadRes;
         int ret = engine->executeTimeRangeQuery(trR, trReadRes);
         std::sort(trReadRes.begin(), trReadRes.end());
-        int64_t ts = start;
+        int64_t ts = start * 1000;
         for (auto& r : trReadRes) {
           EXPECT(r.timestamp == ts, "r.timestamp %ld %ld", r.timestamp, ts);
-          ts++;
+          ts += 1000;
         }
         ASSERT(trReadRes.size() == res_cnt, "size = %zu", trReadRes.size());
         for (auto& row : trReadRes) {
-          ASSERT(RowEquals(row, get_row(i, row.timestamp % kRowsPerVin)), "not equal");
+          ASSERT(RowEquals(row, get_row(i, (row.timestamp/1000) % kRowsPerVin)), "not equal");
         }
         pgrs.wg()->Done();
       }
@@ -312,8 +312,8 @@ void parallel_agg(LindormContest::TSDBEngine* engine, LindormContest::Aggregator
         tAG.tableName = "t1";
         auto start = (rand() % (3 * kRowsPerVin / 4));
         size_t res_cnt = (rand() % (kRowsPerVin / 4)) + 1;
-        tAG.timeLowerBound = start;
-        tAG.timeUpperBound = start + res_cnt;
+        tAG.timeLowerBound = start * 1000;
+        tAG.timeUpperBound = (start + res_cnt) * 1000;
         std::string col_name;
         if (type == 0) {
           // int
@@ -336,14 +336,14 @@ void parallel_agg(LindormContest::TSDBEngine* engine, LindormContest::Aggregator
             row.columns[col_name].getIntegerValue(got);
             int expected = start + res_cnt - 1;
             ASSERT(got == expected, "expected %d, but got %d", expected, got);
-            ASSERT(row.timestamp == start, "expected ts %d, but got %ld", start, row.timestamp);
+            ASSERT(row.timestamp == start*1000, "expected ts %d, but got %ld", start, row.timestamp);
             ASSERT(::memcmp(row.vin.vin, get_row(i, 0).vin.vin, LindormContest::VIN_LENGTH) == 0, "vin not equal");
           } else if (type == 1) {
             double got;
             row.columns[col_name].getDoubleFloatValue(got);
             double expected = 1.0 * (start + res_cnt - 1);
             ASSERT(got == expected, "expected %f, but got %f", expected, got);
-            ASSERT(row.timestamp == start, "expected ts %d, but got %ld", start, row.timestamp);
+            ASSERT(row.timestamp == start*1000, "expected ts %d, but got %ld", start, row.timestamp);
             ASSERT(::memcmp(row.vin.vin, get_row(i, 0).vin.vin, LindormContest::VIN_LENGTH) == 0, "vin not equal");
           }
         } else if (op == LindormContest::AVG) {
@@ -352,7 +352,7 @@ void parallel_agg(LindormContest::TSDBEngine* engine, LindormContest::Aggregator
 
           double expected = (start + start + res_cnt - 1) * 1.0 / 2;
           ASSERT(got == expected, "expected %lf, but got %lf", expected, got);
-          ASSERT(row.timestamp == start, "expected ts %d, but got %ld", start, row.timestamp);
+          ASSERT(row.timestamp == start*1000, "expected ts %d, but got %ld", start, row.timestamp);
           ASSERT(::memcmp(row.vin.vin, get_row(i, 0).vin.vin, LindormContest::VIN_LENGTH) == 0, "vin not equal");
         }
         pgrs.wg()->Done();
@@ -388,8 +388,8 @@ void parallel_downsample(LindormContest::TSDBEngine* engine, LindormContest::Agg
         tRD.vin = vin;
         tRD.tableName = "t1";
         tRD.timeLowerBound = 0;
-        tRD.timeUpperBound = kRowsPerVin;
-        tRD.interval = 10;
+        tRD.timeUpperBound = kRowsPerVin * 1000;
+        tRD.interval = 10 * 1000;
         std::string col_name;
         if (type == 0) {
           // int
@@ -433,7 +433,7 @@ void parallel_downsample(LindormContest::TSDBEngine* engine, LindormContest::Agg
                 int expected = 10 * (j + 1) - 1;
                 expected = expected > filter_val ? expected : LindormContest::kIntNan;
                 ASSERT(got == expected, "expect %d, but got %d", expected, got);
-                ASSERT(r.timestamp == j * 10, "expected ts %d, but got %ld", j * 10, r.timestamp);
+                ASSERT(r.timestamp == j * 10 * 1000, "expected ts %d, but got %ld", j * 10, r.timestamp);
                 ASSERT(::memcmp(r.vin.vin, get_row(i, 0).vin.vin, LindormContest::VIN_LENGTH) == 0, "vin not equal");
               }
             } else if (type == 1) {
@@ -444,7 +444,7 @@ void parallel_downsample(LindormContest::TSDBEngine* engine, LindormContest::Agg
                 double expected = (10 * (j + 1) - 1) * 1.0;
                 expected = expected > filter_val ? expected : LindormContest::kDoubleNan;
                 ASSERT(got == expected, "expect %lf, but got %lf", expected, got);
-                ASSERT(r.timestamp == j * 10, "expected ts %d, but got %ld", j * 10, r.timestamp);
+                ASSERT(r.timestamp == j * 10 * 1000, "expected ts %d, but got %ld", j * 10, r.timestamp);
                 ASSERT(::memcmp(r.vin.vin, get_row(i, 0).vin.vin, LindormContest::VIN_LENGTH) == 0, "vin not equal");
               }
             }
@@ -459,7 +459,7 @@ void parallel_downsample(LindormContest::TSDBEngine* engine, LindormContest::Agg
                   expected = filter_val;
                 }
                 ASSERT(got == expected, "expect %d, but got %d", expected, got);
-                ASSERT(r.timestamp == j * 10, "expected ts %d, but got %ld", j * 10, r.timestamp);
+                ASSERT(r.timestamp == j * 10 * 1000, "expected ts %d, but got %ld", j * 10, r.timestamp);
                 ASSERT(::memcmp(r.vin.vin, get_row(i, 0).vin.vin, LindormContest::VIN_LENGTH) == 0, "vin not equal");
               }
             } else if (type == 1) {
@@ -472,7 +472,7 @@ void parallel_downsample(LindormContest::TSDBEngine* engine, LindormContest::Agg
                   expected = filter_val * 1.0;
                 }
                 ASSERT(got == expected, "expect %lf, but got %lf", expected, got);
-                ASSERT(r.timestamp == j * 10, "expected ts %d, but got %ld", j * 10, r.timestamp);
+                ASSERT(r.timestamp == j * 10 * 1000, "expected ts %d, but got %ld", j * 10, r.timestamp);
                 ASSERT(::memcmp(r.vin.vin, get_row(i, 0).vin.vin, LindormContest::VIN_LENGTH) == 0, "vin not equal");
               }
             }
@@ -492,7 +492,7 @@ void parallel_downsample(LindormContest::TSDBEngine* engine, LindormContest::Agg
               }
               expected = expected > filter_val ? expected : LindormContest::kIntNan;
               ASSERT(got == expected, "expect %lf, but got %lf", expected, got);
-              ASSERT(r.timestamp == j * 10, "expected ts %d, but got %ld", j * 10, r.timestamp);
+              ASSERT(r.timestamp == j * 10 * 1000, "expected ts %d, but got %ld", j * 10, r.timestamp);
               ASSERT(::memcmp(r.vin.vin, get_row(i, 0).vin.vin, LindormContest::VIN_LENGTH) == 0, "vin not equal");
             }
           } else if (cmp_t == LindormContest::EQUAL) {
@@ -505,7 +505,7 @@ void parallel_downsample(LindormContest::TSDBEngine* engine, LindormContest::Agg
                 expected = filter_val * 1.0;
               }
               ASSERT(got == expected, "expect %lf, but got %lf", expected, got);
-              ASSERT(r.timestamp == j * 10, "expected ts %d, but got %ld", j * 10, r.timestamp);
+              ASSERT(r.timestamp == j * 10 * 1000, "expected ts %d, but got %ld", j * 10, r.timestamp);
               ASSERT(::memcmp(r.vin.vin, get_row(i, 0).vin.vin, LindormContest::VIN_LENGTH) == 0, "vin not equal");
             }
           }

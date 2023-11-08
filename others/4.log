@@ -1,0 +1,67 @@
+m[INFO] 2023-11-05 15:50:21.924495 stat.cpp:54: write_cnt: 180000000, write wait cnt: 0, flush wait cnt: 0
+m[INFO] 2023-11-05 15:50:21.924497 stat.cpp:57: col 0 col_name AOAO, col_type Integer, origin_sz 686 MB, compress_sz 43 MB compress rate is 0.062684
+m[INFO] 2023-11-05 15:50:21.924502 stat.cpp:57: col 1 col_name BBPX, col_type Integer, origin_sz 686 MB, compress_sz 85 MB compress rate is 0.125184
+m[INFO] 2023-11-05 15:50:21.924503 stat.cpp:57: col 2 col_name BDPO, col_type double, origin_sz 1373 MB, compress_sz 978 MB compress rate is 0.712544
+m[INFO] 2023-11-05 15:50:21.924505 stat.cpp:57: col 3 col_name BTJH, col_type Integer, origin_sz 686 MB, compress_sz 380 MB compress rate is 0.554442
+m[INFO] 2023-11-05 15:50:21.924506 stat.cpp:57: col 4 col_name BZPV, col_type Integer, origin_sz 686 MB, compress_sz 606 MB compress rate is 0.883636
+m[INFO] 2023-11-05 15:50:21.924508 stat.cpp:57: col 5 col_name CSRC, col_type Integer, origin_sz 686 MB, compress_sz 569 MB compress rate is 0.828863
+m[INFO] 2023-11-05 15:50:21.924509 stat.cpp:57: col 6 col_name DSKQ, col_type Integer, origin_sz 686 MB, compress_sz 113 MB compress rate is 0.165605
+m[INFO] 2023-11-05 15:50:21.924510 stat.cpp:57: col 7 col_name ENVH, col_type Integer, origin_sz 686 MB, compress_sz 540 MB compress rate is 0.787647
+m[INFO] 2023-11-05 15:50:21.924511 stat.cpp:57: col 8 col_name EQLU, col_type Integer, origin_sz 686 MB, compress_sz 244 MB compress rate is 0.355655
+m[INFO] 2023-11-05 15:50:21.924513 stat.cpp:57: col 9 col_name EXGV, col_type Integer, origin_sz 686 MB, compress_sz 43 MB compress rate is 0.062684
+m[INFO] 2023-11-05 15:50:21.924514 stat.cpp:57: col 10 col_name FLLY, col_type string, origin_sz 514 MB, compress_sz 120 MB compress rate is 0.234178
+m[INFO] 2023-11-05 15:50:21.924515 stat.cpp:57: col 11 col_name FQTH, col_type double, origin_sz 1373 MB, compress_sz 980 MB compress rate is 0.713708
+m[INFO] 2023-11-05 15:50:21.924517 stat.cpp:57: col 12 col_name FVXS, col_type string, origin_sz 572 MB, compress_sz 102 MB compress rate is 0.179708
+m[INFO] 2023-11-05 15:50:21.924518 stat.cpp:57: col 13 col_name FWKW, col_type double, origin_sz 1373 MB, compress_sz 876 MB compress rate is 0.637907
+m[INFO] 2023-11-05 15:50:21.924519 stat.cpp:57: col 14 col_name GLNG, col_type string, origin_sz 6351 MB, compress_sz 4300 MB compress rate is 0.677081
+m[INFO] 2023-11-05 15:50:21.924520 stat.cpp:57: col 15 col_name GMNR, col_type Integer, origin_sz 686 MB, compress_sz 188 MB compress rate is 0.274781
+m[INFO] 2023-11-05 15:50:21.924522 stat.cpp:57: col 16 col_name GMVS, col_type Integer, origin_sz 686 MB, compress_sz 7 MB compress rate is 0.010632
+m[INFO] 2023-11-05 15:50:21.924523 stat.cpp:57: col 17 col_name GONE, col_type Integer, origin_sz 686 MB, compress_sz 563 MB compress rate is 0.820708
+m[INFO] 2023-11-05 15:50:21.924525 stat.cpp:57: col 18 col_name HJPZ, col_type Integer, origin_sz 686 MB, compress_sz 337 MB compress rate is 0.491693
+m[INFO] 2023-11-05 15:50:21.924534 stat.cpp:57: col 19 col_name HRXI, col_type Integer, origin_sz 686 MB, compress_sz 85 MB compress rate is 0.125184
+m[INFO] 2023-11-05 15:50:21.924535 stat.cpp:57: col 20 col_name JCGU, col_type Integer, origin_sz 686 MB, compress_sz 43 MB compress rate is 0.062684
+m[INFO] 2023-11-05 15:50:21.924536 stat.cpp:57: col 21 col_name JDOE, col_type Integer, origin_sz 686 MB, compress_sz 307 MB compress rate is 0.447473
+m[INFO] 2023-11-05 15:50:21.924538 stat.cpp:57: col 22 col_name JHET, col_type Integer, origin_sz 686 MB, compress_sz 43 MB compress rate is 0.062684
+m[INFO] 2023-11-05 15:50:21.924539 stat.cpp:57: col 23 col_name JKZL, col_type Integer, origin_sz 686 MB, compress_sz 225 MB compress rate is 0.328255
+m[INFO] 2023-11-05 15:50:21.924540 stat.cpp:57: col 24 col_name JUBK, col_type string, origin_sz 17509 MB, compress_sz 11936 MB compress rate is 0.681703
+m[INFO] 2023-11-05 15:50:21.924541 stat.cpp:57: col 25 col_name KACE, col_type Integer, origin_sz 686 MB, compress_sz 426 MB compress rate is 0.620894
+m[INFO] 2023-11-05 15:50:21.924543 stat.cpp:57: col 26 col_name KFGP, col_type Integer, origin_sz 686 MB, compress_sz 362 MB compress rate is 0.527664
+m[INFO] 2023-11-05 15:50:21.924544 stat.cpp:57: col 27 col_name KWET, col_type Integer, origin_sz 686 MB, compress_sz 320 MB compress rate is 0.467097
+m[INFO] 2023-11-05 15:50:21.924546 stat.cpp:57: col 28 col_name LFZG, col_type Integer, origin_sz 686 MB, compress_sz 104 MB compress rate is 0.152809
+m[INFO] 2023-11-05 15:50:21.924548 stat.cpp:57: col 29 col_name LIOS, col_type Integer, origin_sz 686 MB, compress_sz 113 MB compress rate is 0.165605
+m[INFO] 2023-11-05 15:50:21.924551 stat.cpp:57: col 30 col_name LIYD, col_type string, origin_sz 514 MB, compress_sz 31 MB compress rate is 0.061630
+m[INFO] 2023-11-05 15:50:21.924553 stat.cpp:57: col 31 col_name LMLK, col_type double, origin_sz 1373 MB, compress_sz 983 MB compress rate is 0.716454
+m[INFO] 2023-11-05 15:50:21.924555 stat.cpp:57: col 32 col_name LYLI, col_type double, origin_sz 1373 MB, compress_sz 962 MB compress rate is 0.700941
+m[INFO] 2023-11-05 15:50:21.924557 stat.cpp:57: col 33 col_name MLBY, col_type Integer, origin_sz 686 MB, compress_sz 506 MB compress rate is 0.737264
+m[INFO] 2023-11-05 15:50:21.924559 stat.cpp:57: col 34 col_name MUBC, col_type Integer, origin_sz 686 MB, compress_sz 43 MB compress rate is 0.062684
+m[INFO] 2023-11-05 15:50:21.924572 stat.cpp:57: col 35 col_name NXCR, col_type Integer, origin_sz 686 MB, compress_sz 380 MB compress rate is 0.554395
+m[INFO] 2023-11-05 15:50:21.924574 stat.cpp:57: col 36 col_name ORNI, col_type string, origin_sz 5493 MB, compress_sz 3564 MB compress rate is 0.648829
+m[INFO] 2023-11-05 15:50:21.924576 stat.cpp:57: col 37 col_name OZSM, col_type Integer, origin_sz 686 MB, compress_sz 551 MB compress rate is 0.803675
+m[INFO] 2023-11-05 15:50:21.924579 stat.cpp:57: col 38 col_name PQRQ, col_type Integer, origin_sz 686 MB, compress_sz 506 MB compress rate is 0.737200
+m[INFO] 2023-11-05 15:50:21.924581 stat.cpp:57: col 39 col_name SBXA, col_type double, origin_sz 1373 MB, compress_sz 978 MB compress rate is 0.712590
+m[INFO] 2023-11-05 15:50:21.924583 stat.cpp:57: col 40 col_name SCHU, col_type string, origin_sz 514 MB, compress_sz 149 MB compress rate is 0.290667
+m[INFO] 2023-11-05 15:50:21.924584 stat.cpp:57: col 41 col_name SYMN, col_type Integer, origin_sz 686 MB, compress_sz 492 MB compress rate is 0.716709
+m[INFO] 2023-11-05 15:50:21.924586 stat.cpp:57: col 42 col_name TEDW, col_type double, origin_sz 1373 MB, compress_sz 980 MB compress rate is 0.713986
+m[INFO] 2023-11-05 15:50:21.924587 stat.cpp:57: col 43 col_name TFGW, col_type Integer, origin_sz 686 MB, compress_sz 43 MB compress rate is 0.062684
+m[INFO] 2023-11-05 15:50:21.924592 stat.cpp:57: col 44 col_name UAPJ, col_type Integer, origin_sz 686 MB, compress_sz 412 MB compress rate is 0.600619
+m[INFO] 2023-11-05 15:50:21.924594 stat.cpp:57: col 45 col_name UFPI, col_type string, origin_sz 1201 MB, compress_sz 0 MB compress rate is 0.000507
+m[INFO] 2023-11-05 15:50:21.924595 stat.cpp:57: col 46 col_name UICP, col_type Integer, origin_sz 686 MB, compress_sz 561 MB compress rate is 0.817788
+m[INFO] 2023-11-05 15:50:21.924596 stat.cpp:57: col 47 col_name UVGJ, col_type double, origin_sz 1373 MB, compress_sz 995 MB compress rate is 0.725245
+m[INFO] 2023-11-05 15:50:21.924597 stat.cpp:57: col 48 col_name UZSV, col_type string, origin_sz 2918 MB, compress_sz 1791 MB compress rate is 0.613894
+m[INFO] 2023-11-05 15:50:21.924599 stat.cpp:57: col 49 col_name WKUZ, col_type Integer, origin_sz 686 MB, compress_sz 0 MB compress rate is 0.000276
+m[INFO] 2023-11-05 15:50:21.924600 stat.cpp:57: col 50 col_name WLYQ, col_type Integer, origin_sz 686 MB, compress_sz 104 MB compress rate is 0.152789
+m[INFO] 2023-11-05 15:50:21.924601 stat.cpp:57: col 51 col_name WNHB, col_type Integer, origin_sz 686 MB, compress_sz 361 MB compress rate is 0.526342
+m[INFO] 2023-11-05 15:50:21.924603 stat.cpp:57: col 52 col_name XCDQ, col_type Integer, origin_sz 686 MB, compress_sz 225 MB compress rate is 0.328325
+m[INFO] 2023-11-05 15:50:21.924604 stat.cpp:57: col 53 col_name XRTP, col_type double, origin_sz 1373 MB, compress_sz 975 MB compress rate is 0.710379
+m[INFO] 2023-11-05 15:50:21.924605 stat.cpp:57: col 54 col_name YCTI, col_type Integer, origin_sz 686 MB, compress_sz 64 MB compress rate is 0.093934
+m[INFO] 2023-11-05 15:50:21.924606 stat.cpp:57: col 55 col_name YDXB, col_type Integer, origin_sz 686 MB, compress_sz 426 MB compress rate is 0.620533
+m[INFO] 2023-11-05 15:50:21.924607 stat.cpp:57: col 56 col_name ZEBY, col_type string, origin_sz 1544 MB, compress_sz 0 MB compress rate is 0.000449
+m[INFO] 2023-11-05 15:50:21.924609 stat.cpp:57: col 57 col_name ZIKG, col_type double, origin_sz 1373 MB, compress_sz 893 MB compress rate is 0.650698
+m[INFO] 2023-11-05 15:50:21.924611 stat.cpp:57: col 58 col_name ZTGP, col_type Integer, origin_sz 686 MB, compress_sz 159 MB compress rate is 0.232627
+m[INFO] 2023-11-05 15:50:21.924613 stat.cpp:57: col 59 col_name ZZBE, col_type Integer, origin_sz 686 MB, compress_sz 361 MB compress rate is 0.526318
+m[INFO] 2023-11-05 15:50:21.924615 stat.cpp:62: col 60, origin_sz 343 MB, compress_sz 2 MB compress rate is 0.007417
+m[INFO] 2023-11-05 15:50:21.924618 stat.cpp:62: col 61, origin_sz 1373 MB, compress_sz 11 MB compress rate is 0.008164
+m[INFO] 2023-11-05 15:50:21.924620 stat.cpp:62: col 62, origin_sz 343 MB, compress_sz 311 MB compress rate is 0.908333
+m[INFO] 2023-11-05 15:50:21.924693 stat.cpp:145: use 1976.683594 MB memory
+m[INFO] 2023-11-05 15:50:21.924698 stat.cpp:69: *********PERFORMANCE STAT SUMMARY*********
+m[INFO] 2023-11-05 15:50:21.924700 stat.cpp:70:

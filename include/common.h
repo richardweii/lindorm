@@ -80,6 +80,18 @@ static inline int svid2vid(int shard_id, int idx) {
 
 static inline size_t rounddown512(size_t offset) { return offset & ~511; }
 static inline size_t roundup512(size_t len) { return (len + 511) & ~511; }
+
+enum class MyColumnType {
+  MyInt32,
+  MyInt64,
+  MyString,
+  MyDouble,
+  MyUInt16,
+};
+
+constexpr int MAX_DIFF_BITS = 12;
+constexpr uint64_t MAX_DIFF_VAL = 0x1 << MAX_DIFF_BITS;
+
 } // namespace LindormContest
 
 #endif
