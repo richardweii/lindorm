@@ -419,13 +419,13 @@ int TSDBEngineImpl::executeAggregateQuery(const TimeRangeAggregationRequest& agg
   }
 
 #ifdef ENABLE_STAT
-  int a = agg_query_cnt.load();
-  if (a > 10000 && a <= 10050) {
-    printf("TimeRangeAggregationRequest :VID %d [%ld, %ld) ", vid, aggregationReq.timeLowerBound,
-           aggregationReq.timeUpperBound);
-    printf("[%s] ", aggregationReq.columnName.c_str());
-    printf("\n");
-  }
+  // int a = agg_query_cnt.load();
+  // if (a > 10000 && a <= 10050) {
+  //   printf("TimeRangeAggregationRequest :VID %d [%ld, %ld) ", vid, aggregationReq.timeLowerBound,
+  //          aggregationReq.timeUpperBound);
+  //   printf("[%s] ", aggregationReq.columnName.c_str());
+  //   printf("\n");
+  // }
 #endif
   int colid = column_idx_.at(aggregationReq.columnName);
 
@@ -459,13 +459,13 @@ int TSDBEngineImpl::executeDownsampleQuery(const TimeRangeDownsampleRequest& dow
   }
 
 #ifdef ENABLE_STAT
-  int a = downsample_query_cnt.load();
-  if (a > 200000 && a <= 200050) {
-    printf("TimeRangeDownsampleRequest :VID %d [%ld, %ld), interval %ld ", vid, downsampleReq.timeLowerBound,
-           downsampleReq.timeUpperBound, downsampleReq.interval);
-    printf("[%s] ", downsampleReq.columnName.c_str());
-    printf("\n");
-  }
+  // int a = downsample_query_cnt.load();
+  // if (a > 200000 && a <= 200050) {
+  //   printf("TimeRangeDownsampleRequest :VID %d [%ld, %ld), interval %ld ", vid, downsampleReq.timeLowerBound,
+  //          downsampleReq.timeUpperBound, downsampleReq.interval);
+  //   printf("[%s] ", downsampleReq.columnName.c_str());
+  //   printf("\n");
+  // }
 #endif
 
   int colid = column_idx_.at(downsampleReq.columnName);

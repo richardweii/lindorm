@@ -423,6 +423,8 @@ public:
   virtual int GetColid() = 0;
 
   virtual size_t TotalSize() = 0;
+
+  virtual void PrintStat(std::string* col_names) {}
 };
 
 class IntArrWrapper : public ColumnArrWrapper {
@@ -450,6 +452,11 @@ public:
   int GetColid() override { return arr->col_id_; }
 
   size_t TotalSize() override { return arr->TotalSize(); }
+
+  void PrintStat(std::string* col_names) override {
+    LOG_INFO("[INTERGER col %s], min: %d, max: %d, diff_cnt: %d", col_names[arr->col_id_].c_str(), arr->min, arr->max,
+             arr->diff_cnt);
+  }
 
 private:
   ColumnArr<int>* arr;
@@ -483,6 +490,11 @@ public:
   int GetColid() override { return arr->col_id_; }
 
   size_t TotalSize() override { return arr->TotalSize(); }
+
+  void PrintStat(std::string* col_names) override {
+    LOG_INFO("[DOUBLE col %s], min: %lf, max: %lf, diff_cnt: %d", col_names[arr->col_id_].c_str(), arr->min, arr->max,
+             arr->diff_cnt);
+  }
 
 private:
   ColumnArr<double>* arr;
@@ -580,7 +592,7 @@ public:
       arr->min = ts;
       arr->max = ts;
     } else {
-      if (std::abs(arr->data_[idx] - arr->data_[idx-1]) >= MAX_DIFF_VAL) arr->diff_cnt++;
+      if (std::abs(arr->data_[idx] - arr->data_[idx - 1]) >= MAX_DIFF_VAL) arr->diff_cnt++;
       if ((int64_t)arr->min > ts) arr->min = ts;
       if ((int64_t)arr->max < ts) arr->max = ts;
     }

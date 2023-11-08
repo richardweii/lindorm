@@ -213,6 +213,7 @@ Status ShardImpl::Flush(uint16_t svid, bool shutdown) {
 
     // 刷写数据列
     for (int i = 0; i < kColumnNum; i++) {
+      immutable_mmt->columnArrs_[i]->PrintStat(engine_->columns_name_);
       immutable_mmt->columnArrs_[i]->Flush(write_buf_[svid], immutable_mmt->cnt_, meta);
     }
     immutable_mmt->ts_col_->Flush(write_buf_[svid], immutable_mmt->cnt_, meta);
